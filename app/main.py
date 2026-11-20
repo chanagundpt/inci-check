@@ -20,6 +20,7 @@ class Api:
         self._reg = core.RegDB()
         self._cosing = core.CosIng()
         self._lock = threading.Lock()
+        self._seq = {}
 
     # ------------------------------------------------ helpers
     def _js(self, fn, *args):
@@ -58,12 +59,27 @@ class Api:
             f.write(base64.b64decode(b64.split(",")[-1]))
         return self.load(slot, p, opts)
 
+    def clear(self, slot):
+        self._seq[slot] = self._seq.get(slot, 0) + 1   # งานอ่านไฟล์ที่ค้างอยู่จะถูกทิ้ง
+        self._docs.pop(slot, None)
+        if slot == "label":
+            self._label = None
+        elif slot == "formula":
+            self._formula = None
+        return True
+
     def load(self, slot, path, opts=None):
         opts = opts or {}
+        seq = opts.get("seq")
+        if seq is not None:
+            self._seq[slot] = seq
+        stale = lambda: seq is not None and self._seq.get(slot) != seq
         try:
             prog = self._prog(slot)
             prog("กำลังเปิดไฟล์…")
             doc = core.Doc(path, progress=prog, ocr_lang=opts.get("lang", "auto"), force_ocr=opts.get("ocr", False))
+            if stale():
+                return {"ok": False, "stale": True}
             self._docs[slot] = doc
             prog("กำลังแสดงผล…")
             view = doc.view()

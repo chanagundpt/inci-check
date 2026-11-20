@@ -60,6 +60,10 @@ main{min-height:0;position:relative}
 .box.all{background:rgba(74,222,128,.10)}
 .box.prob{background:rgba(251,191,36,.12);outline:1.5px dashed #FBBF24}
 .sum .sp{flex:1}
+.qbar{display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid var(--line)}
+.qbar input{flex:1;padding:6px 10px}
+.qbar button{padding:4px 10px}
+mark{background:#3B3110;color:#FCD34D;border-radius:3px;padding:0 1px}
 .drop{position:absolute;inset:14px;border:2px dashed var(--line2);border-radius:14px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;color:var(--muted);text-align:center;padding:20px}
 .drop .big{font-size:15px;color:var(--text)}
@@ -110,7 +114,9 @@ table.xt td.bad{background:#FECACA}
 .uses th{color:var(--muted);font-weight:500}
 a.lk{color:var(--accent);cursor:pointer;text-decoration:none}
 a.lk:hover{text-decoration:underline}
-.mid-actions{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center}
+.mid-actions{display:flex;flex-wrap:wrap;gap:6px 6px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center}
+.mid-actions button{white-space:nowrap;padding:6px 10px}
+#cmpHint,#regHint{flex-basis:100%;order:9}
 footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;color:var(--dim);background:var(--panel);border-top:1px solid var(--line)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
 .modal.on{display:flex}
@@ -154,10 +160,13 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
       </div>
       <div class="card">
         <div class="mid-actions"><button class="primary" id="btnCmp" disabled>ตรวจเทียบ</button>
+          <button class="ghost" id="btnRef1" title="อ่านไฟล์ฉลากและสูตรใหม่ทั้งหมดแล้วตรวจเทียบอีกครั้ง">🔄 รีเฟรช</button>
+          <button class="ghost" id="btnClr1" title="ล้างไฟล์ฉลากและสูตร เพื่อเริ่มตรวจชุดใหม่">🧹 ล้าง</button>
           <span class="mini" id="cmpHint">เลือกไฟล์ฉลาก (ซ้าย) และไฟล์สูตร (ขวา)</span><div class="sp"></div>
           <button class="ghost" id="btnRep1" disabled title="ไฟล์ .html ส่งให้คนอื่นเปิดดูได้ ชี้แล้วไฮไลต์เหมือนในโปรแกรม">📤 รายงานส่งต่อ</button>
           <button class="ghost" id="btnExp1" disabled title="บันทึกผลเป็น Excel">Excel</button></div>
         <div class="sum" id="sum1"></div>
+        <div class="qbar"><input id="q1" placeholder="🔍 ค้นหาชื่อสาร (อังกฤษ / ญี่ปุ่น / ไทย / CAS)" autocomplete="off"><button class="ghost" id="q1x" title="ล้างคำค้น">✕</button></div>
         <div class="res" id="res1"><div class="empty">เลือกไฟล์ทั้งสองฝั่งแล้วกด “ตรวจเทียบ”<br>ชี้เมาส์ที่รายการเพื่อดูตำแหน่งบนฉลากและในสูตร</div></div>
         <div class="detail" id="det1"></div>
       </div>
@@ -181,11 +190,14 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
           <div class="busy"><div class="spin"></div><div data-msg></div></div></div>
       </div>
       <div class="card">
-        <div class="mid-actions"><span class="mini" id="regHint">ยังไม่ได้เลือกไฟล์</span><div class="sp"></div>
+        <div class="mid-actions"><button class="ghost" id="btnRef2" title="อ่านไฟล์ใหม่แล้วตรวจอีกครั้ง">🔄 รีเฟรช</button>
+          <button class="ghost" id="btnClr2" title="ล้างไฟล์ เพื่อตรวจไฟล์ใหม่">🧹 ล้าง</button>
+          <span class="mini" id="regHint">ยังไม่ได้เลือกไฟล์</span><div class="sp"></div>
           <button class="ghost" id="btnCos" disabled>ตรวจชื่อ CosIng ใหม่</button>
           <button class="ghost" id="btnRep2" disabled title="ไฟล์ .html ส่งให้คนอื่นเปิดดูได้ ชี้แล้วไฮไลต์เหมือนในโปรแกรม">📤 รายงานส่งต่อ</button>
           <button class="ghost" id="btnExp2" disabled>Excel</button></div>
         <div class="sum" id="sum2"></div>
+        <div class="qbar"><input id="q2" placeholder="🔍 ค้นหาชื่อสาร / เลข CAS / ลำดับในประกาศ" autocomplete="off"><button class="ghost" id="q2x" title="ล้างคำค้น">✕</button></div>
         <div class="res" id="res2"><div class="empty">เลือกไฟล์ทางซ้ายเพื่อเริ่มตรวจ<br>ชี้เมาส์ที่สารเพื่อไฮไลต์ตำแหน่งในไฟล์ · คลิกเพื่อดูรายละเอียดและหน้าประกาศ</div></div>
         <div class="detail" id="det2"></div>
       </div>
@@ -232,7 +244,7 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let api=null;
-const S={label:null,formula:null,cmp:null,reg:null,sel1:null,sel2:null,f1:'all',f2:'all',cos:{},online:null};
+const S={label:null,formula:null,cmp:null,reg:null,sel1:null,sel2:null,f1:'all',f2:'all',cos:{},online:null,paths:{},q1:'',q2:''};
 
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',err?6000:2600)}
 
@@ -242,7 +254,7 @@ class Viewer{
     $$('[data-z]',card).forEach(b=>b.onclick=()=>this.setZoom(b.dataset.z));
     this.vw.addEventListener('wheel',e=>{if(e.ctrlKey){e.preventDefault();this.setZoom(e.deltaY<0?'+':'-')}},{passive:false});}
   busy(msg){const b=$('.busy',this.vw);b.classList.toggle('on',!!msg);$('[data-msg]',b).textContent=msg||''}
-  set(view){this.view=view;this.zoom=1;this.table=null;const dr=$('.drop',this.vw);if(dr)dr.style.display='none';
+  set(view){this.view=view;this.zoom=1;this.table=null;this._marks={};const dr=$('.drop',this.vw);if(dr)dr.style.display='none';
     const fl=$('[data-f]',this.card);if(fl)fl.textContent=view.name;
     const src=$('.hd [data-src]',this.card);if(src){src.hidden=false;src.className='pill'+(view.source==='ocr'?' ocr':'');
       src.textContent=view.source==='ocr'?'อ่านด้วย OCR':view.source==='table'?'ตาราง':'ข้อความในไฟล์'}
@@ -310,11 +322,50 @@ $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.toggle('o
   Object.values(V).forEach(v=>{if(v.view&&v.view.kind!=='table')v.pg.forEach(p=>{const w=v.fitW()*v.zoom;p.el.style.width=w+'px';p.el.style.height=(w*p.h/p.w)+'px'})})});
 
 /* ---------------- loading files ---------------- */
+/* ---------------- search / clear / refresh ---------------- */
+// ค้นหา: ไม่สนตัวพิมพ์ ช่องว่าง ขีด (เช่น "cetearyl alc", "ceteareth20", "122-99-6", "グリセリン")
+const qNorm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[\s\-‐–—ー－,.()（）\/]/g,'');
+function qHit(q,fields){if(!q)return true;const n=qNorm(q);if(!n)return true;
+  const words=q.trim().split(/\s+/).map(qNorm).filter(Boolean),hay=fields.filter(Boolean).map(qNorm).join('|');
+  return hay.includes(n)||words.every(w=>hay.includes(w))}
+function qMark(sel,q){const words=q.trim().split(/\s+/).filter(w=>w.length>=1).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));if(!words.length)return;
+  const re=new RegExp('('+words.join('|')+')','gi');
+  $$(sel+' .nm, '+sel+' .sub .jp').forEach(el=>{if(el.children.length)return;el.innerHTML=esc(el.textContent).replace(re,'<mark>$1</mark>')})}
+let qT=null;
+$('#q1').oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{S.q1=e.target.value;renderCmp()},120)};
+$('#q2').oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{S.q2=e.target.value;renderReg()},120)};
+$('#q1x').onclick=()=>{$('#q1').value='';S.q1='';renderCmp()};
+$('#q2x').onclick=()=>{$('#q2').value='';S.q2='';renderReg()};
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key.toLowerCase()==='f'){e.preventDefault();const q=$('#p1').classList.contains('on')?'#q1':'#q2';$(q).focus();$(q).select()}});
+function clearSlot(slot){LOADSEQ[slot]++;api.clear(slot);const v=V[slot];
+  v.view=null;v.pg=[];v.table=null;v._marks={};v.pagesEl.innerHTML='';v.busy('');
+  const dr=$('.drop',v.vw);if(dr)dr.style.display='';const fl=$('[data-f]',v.card);if(fl)fl.textContent='';
+  const src=$('.hd [data-src]',v.card);if(src)src.hidden=true;S.paths[slot]=null}
+$('#btnClr1').onclick=()=>{clearSlot('label');clearSlot('formula');S.label=null;S.formula=null;resetResults('label');S.q1='';$('#q1').value='';
+  $('#res1').innerHTML='<div class="empty">ล้างแล้ว — เลือกไฟล์ฉลาก (ซ้าย) และไฟล์สูตร (ขวา)</div>';updCmpBtn()};
+$('#btnClr2').onclick=()=>{clearSlot('reg');resetResults('reg');S.q2='';$('#q2').value='';$('#regHint').textContent='ยังไม่ได้เลือกไฟล์';
+  $('#res2').innerHTML='<div class="empty">ล้างแล้ว — เลือกไฟล์ทางซ้ายเพื่อเริ่มตรวจ</div>'};
+$('#btnRef1').onclick=async()=>{const p={...S.paths};if(!p.label&&!p.formula){toast('ยังไม่ได้เลือกไฟล์');return}
+  // อ่านทั้งสองไฟล์ใหม่ (ไฟล์ที่แก้ไขหลังเปิดจะได้ค่าล่าสุด) แล้วตรวจเทียบใหม่อัตโนมัติ
+  await Promise.all([p.formula&&loadFile('formula',p.formula),p.label&&loadFile('label',p.label)]);toast('รีเฟรชแล้ว')};
+$('#btnRef2').onclick=async()=>{if(!S.paths.reg){toast('ยังไม่ได้เลือกไฟล์');return}await loadFile('reg',S.paths.reg);toast('รีเฟรชแล้ว')};
+
+// เลขลำดับการโหลดต่อช่อง: เปิดไฟล์ใหม่ซ้อนระหว่างไฟล์เดิมยังอ่านไม่เสร็จ → ผลของไฟล์เก่าที่มาทีหลังจะถูกทิ้ง
+const LOADSEQ={label:0,formula:0,reg:0};
+function resetResults(slot){
+  if(slot==='reg'){S.reg=null;S.sel2=null;$('#sum2').innerHTML='';$('#det2').classList.remove('on');
+    $('#res2').innerHTML='<div class="empty">กำลังอ่านไฟล์…</div>';['#btnCos','#btnExp2','#btnRep2'].forEach(s=>$(s).disabled=true);return}
+  S.cmp=null;S.sel1=null;$('#sum1').innerHTML='';$('#det1').classList.remove('on');
+  $('#res1').innerHTML='<div class="empty">กำลังอ่านไฟล์…</div>';['#btnExp1','#btnRep1'].forEach(s=>$(s).disabled=true);
+  const other=slot==='label'?'formula':'label';if(V[other].view)V[other].clear('hl'),V[other].clear('bad'),V[other].clear('prob'),V[other].clear('warn')}
 async function loadFile(slot,path,b64name,b64){
-  const v=V[slot];v.busy('กำลังเปิดไฟล์…');
-  const r=b64?await api.load_bytes(slot,b64name,b64,{}):await api.load(slot,path,{});
+  const v=V[slot],seq=++LOADSEQ[slot];v.busy('กำลังเปิดไฟล์…');resetResults(slot);
+  if(slot==='label')S.label=null;if(slot==='formula')S.formula=null;updCmpBtn();
+  const r=b64?await api.load_bytes(slot,b64name,b64,{seq}):await api.load(slot,path,{seq});
+  if(seq!==LOADSEQ[slot]||r.stale)return;   // มีการเปิดไฟล์ใหม่กว่าแล้ว
   v.busy('');
-  if(!r.ok){toast(r.error||'เปิดไฟล์ไม่ได้',true);return}
+  if(!r.ok){toast(r.error||'เปิดไฟล์ไม่ได้',true);$(slot==='reg'?'#res2':'#res1').innerHTML='<div class="empty">เปิดไฟล์ไม่ได้</div>';return}
+  S.paths[slot]=r.path;
   v.set(r.view);
   if(r.warn)toast(r.warn,true);
   if(slot==='label'){S.label=r.label;if(!r.label.items.length)toast(r.label.error||'ไม่พบรายการส่วนประกอบบนฉลาก',true);
@@ -365,7 +416,8 @@ function renderCmp(){const r=S.cmp;if(!r)return;const s=r.summary;S.sort1=S.sort
     `<span class="sp"></span><span class="chip ${S.sort1==='label'?'on':''}" data-sort="label">เรียงตามฉลาก</span><span class="chip ${S.sort1==='prob'?'on':''}" data-sort="prob">ปัญหาก่อน</span>`;
   $$('#sum1 .chip[data-k]').forEach(c=>c.onclick=()=>{S.f1=c.dataset.k;renderCmp()});
   $$('#sum1 .chip[data-sort]').forEach(c=>c.onclick=()=>{S.sort1=c.dataset.sort;renderCmp()});
-  const f=S.f1, list=r.results.map((x,i)=>[x,i]).filter(([x])=>f==='all'||(f==='near'?(x.status==='near'||x.status==='check'):f==='order'?!!x.order_warn:x.status===f));
+  const f=S.f1, list=r.results.map((x,i)=>[x,i]).filter(([x])=>f==='all'||(f==='near'?(x.status==='near'||x.status==='check'):f==='order'?!!x.order_warn:x.status===f))
+    .filter(([x])=>qHit(S.q1,[x.label_text,x.formula&&x.formula.inci,x.formula&&x.formula.jp,x.formula&&x.formula.th,x.formula&&x.formula.cas_text,x.formula&&x.formula.func]));
   let html='';
   if(S.sort1==='label'){const [lab,rest]=cmpOrder(list);
     if(lab.length)html+=`<div class="grp">ตามลำดับบนฉลาก (${lab.length})</div>`+lab.map(([x,i])=>cmpRowHtml(x,i,S.sel1===i)).join('');
@@ -373,7 +425,8 @@ function renderCmp(){const r=S.cmp;if(!r)return;const s=r.summary;S.sort1=S.sort
   }else{const pr={missing:0,extra:1,check:2,near:3,ok:4};
     list.sort((a,b)=>(pr[a[0].status]-pr[b[0].status])||((a[0].f??999)-(b[0].f??999)));
     html=list.map(([x,i])=>cmpRowHtml(x,i,S.sel1===i)).join('')}
-  $('#res1').innerHTML=html||'<div class="empty">ไม่มีรายการในกลุ่มนี้</div>';
+  $('#res1').innerHTML=html||`<div class="empty">${S.q1?'ไม่พบสารที่ตรงกับ “'+esc(S.q1)+'”':'ไม่มีรายการในกลุ่มนี้'}</div>`;
+  if(S.q1)qMark('#res1',S.q1);
   $$('#res1 .row').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover1(i);el.onclick=()=>select1(i)});
   $('#res1').onmouseleave=()=>{if(S.sel1!=null)hover1(S.sel1,false);else{V.label.clear('hl');V.formula.clear('hl');V.label.clear('bad')}};
 }
@@ -430,11 +483,13 @@ function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
   $$('#sum2 .chip').forEach(c=>c.onclick=()=>{S.f2=c.dataset.k;renderReg()});
   const f=S.f2;let h='';
   const order=['banned','restricted','guide','ok'];
-  if(f==='all'||f==='words'){if(r.words.length)h+=`<div class="grp">คำห้ามใช้ในชื่อ/ข้อความบนฉลาก (${r.words.length})</div>`+r.words.map((w,i)=>
+  const wl=r.words.map((w,i)=>[w,i]).filter(([w])=>qHit(S.q2,[w.found,w.line,w.word.word]));
+  if(f==='all'||f==='words'){if(wl.length)h+=`<div class="grp">คำห้ามใช้ในชื่อ/ข้อความบนฉลาก (${wl.length})</div>`+wl.map(([w,i])=>
       `<div class="row ${S.sel2==='w'+i?'sel':''}" data-w="${i}"><div class="ic word">!</div><div><div class="nm">“${esc(w.found)}”</div>
        <div class="sub">${esc(w.line)}</div><span class="tag warn">คำห้ามใช้ ลำดับ ${w.word.no}: ${esc(w.word.word)}</span></div><div class="meta">หน้า ${w.word.page}</div></div>`).join('')}
   if(f!=='words')for(const lv of order){
-    const items=r.items.map((it,i)=>[it,i]).filter(([it])=>it.level===lv&&(f==='all'||f===lv||(f==='cos'&&it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error')));
+    const items=r.items.map((it,i)=>[it,i]).filter(([it])=>it.level===lv&&(f==='all'||f===lv||(f==='cos'&&it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error')))
+      .filter(([it])=>qHit(S.q2,[it.name,it.jp,it.th,it.cas.join(' '),...it.hits.map(h=>'ลำดับ '+h.entry.no+' '+(h.entry.name||h.entry.chem||''))]));
     if(!items.length)continue;
     h+=`<div class="grp">${LV[lv][1]} (${items.length})</div>`+items.map(([it,i])=>{
       const tags=it.hits.map(hh=>hh.kind==='banned'?`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}${hh.entry.superseded?' (ฉบับเดิม)':''}</span>`
@@ -443,7 +498,8 @@ function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
       return `<div class="row ${S.sel2===i?'sel':''}" data-i="${i}"><div class="ic ${lv}">${LV[lv][0]}</div><div><div class="nm">${esc(it.name)}</div>
         ${it.jp?`<div class="sub"><span class="jp">${esc(it.jp)}</span></div>`:''}${tags}</div>
         <div class="meta">${it.cas.length?esc(it.cas[0]):''}${it.pct!=null?'<br>'+fmtPct(it.pct):''}</div></div>`}).join('')}
-  $('#res2').innerHTML=h||'<div class="empty">ไม่มีรายการในกลุ่มนี้</div>';
+  $('#res2').innerHTML=h||`<div class="empty">${S.q2?'ไม่พบสารที่ตรงกับ “'+esc(S.q2)+'”':'ไม่มีรายการในกลุ่มนี้'}</div>`;
+  if(S.q2)qMark('#res2',S.q2);
   $$('#res2 .row[data-i]').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover2(i);el.onclick=()=>select2(i)});
   $$('#res2 .row[data-w]').forEach(el=>{const i=+el.dataset.w;el.onmouseenter=()=>V.reg.mark(S.reg.words[i].marks,'warn');el.onclick=()=>selectW(i)});
 }
