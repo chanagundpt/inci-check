@@ -227,6 +227,9 @@ class Api:
 
 
 def main():
+    if "--test-replace" in sys.argv:   # ทดสอบขั้นแทนที่ไฟล์ของการอัปเดต
+        updater.start_replacer(sys.argv[sys.argv.index("--test-replace") + 1], sys.executable)
+        return
     api = Api()
     ui = os.path.join(core.BASE, "ui", "index.html")
     win = webview.create_window("2NK INCI Check", ui, js_api=api, width=1500, height=920, min_size=(1100, 680),
