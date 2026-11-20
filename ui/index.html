@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>2NK INCI Check</title>
+<style>
+:root{
+  --bg:#0F1115; --panel:#161A21; --panel2:#1B2029; --line:#262B35; --line2:#323947;
+  --text:#E6E8EE; --muted:#8B93A3; --dim:#5D6575;
+  --accent:#38BDF8; --accent-bg:#0C2A3A;
+  --ok:#4ADE80; --ok-bg:#12281B; --warn:#FBBF24; --warn-bg:#2E2410; --bad:#F87171; --bad-bg:#2C1517;
+  --info:#A78BFA; --info-bg:#211B38; --near:#FB923C; --near-bg:#2D1D10;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:"Segoe UI Variable Text","Segoe UI","Leelawadee UI","Yu Gothic UI","Meiryo",sans-serif;font-size:13.5px}
+button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent);color:#fff}
+button.primary{background:var(--accent);color:#04202E;border-color:var(--accent);font-weight:600}
+button.primary:hover{filter:brightness(1.1);color:#04202E}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+button.ghost:hover{color:var(--text);border-color:var(--line2)}
+button:disabled{opacity:.45;cursor:default}
+input{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;outline:none}
+input:focus{border-color:var(--accent)}
+.app{display:grid;grid-template-rows:48px 1fr 26px;height:100vh}
+header{display:flex;align-items:center;gap:6px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.logo{font-weight:700;color:var(--accent);letter-spacing:.3px;margin-right:18px;display:flex;align-items:center;gap:8px}
+.logo b{color:var(--text);font-weight:600}
+.tab{background:transparent;border:1px solid transparent;color:var(--muted);padding:6px 14px;border-radius:7px}
+.tab.on{background:#1F2937;color:var(--accent);border-color:#24324A}
+.sp{flex:1}
+.net{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.dot.on{background:var(--ok)} .dot.off{background:var(--bad)}
+main{min-height:0;position:relative}
+.page{position:absolute;inset:0;display:none;padding:10px;gap:10px}
+.page.on{display:grid}
+#p1{grid-template-columns:minmax(0,1fr) 440px minmax(0,1fr)}
+#p2{grid-template-columns:minmax(0,1fr) 520px}
+#p3{grid-template-columns:minmax(0,1fr) 380px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
+.card>.hd{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);min-height:46px}
+.hd .t{font-weight:600}
+.hd .f{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.pill{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--panel2);border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
+.pill.ocr{color:var(--warn);border-color:#4A3A12}
+/* viewer */
+.vw{position:relative;flex:1;min-height:0;overflow:auto;background:#0B0D11}
+.vw .pages{padding:14px;display:flex;flex-direction:column;align-items:center;gap:14px;width:max-content;min-width:100%}
+.pg{position:relative;background:#fff;box-shadow:0 1px 0 #000,0 0 0 1px #20242C;flex:none}
+.pg img{display:block;width:100%;height:100%;user-select:none;-webkit-user-drag:none}
+.ov{position:absolute;inset:0;pointer-events:none}
+.box{position:absolute;border-radius:2px;transition:opacity .12s}
+.box.hl{background:rgba(56,189,248,.28);outline:2px solid #38BDF8;box-shadow:0 0 0 3px rgba(56,189,248,.25)}
+.box.bad{background:rgba(248,113,113,.28);outline:2px solid #F87171}
+.box.warn{background:rgba(251,191,36,.28);outline:2px solid #FBBF24}
+.box.soft{background:rgba(56,189,248,.10);outline:1px solid rgba(56,189,248,.45)}
+.box.all{background:rgba(74,222,128,.10)}
+.drop{position:absolute;inset:14px;border:2px dashed var(--line2);border-radius:14px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;color:var(--muted);text-align:center;padding:20px}
+.drop .big{font-size:15px;color:var(--text)}
+.vw.dragging .drop,.vw.dragging{outline:2px dashed var(--accent);outline-offset:-6px}
+.busy{position:absolute;inset:0;background:rgba(11,13,17,.82);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:5;color:var(--text)}
+.busy.on{display:flex}
+.spin{width:30px;height:30px;border:3px solid var(--line2);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.zoom{display:flex;gap:2px}
+.zoom button{padding:4px 9px}
+table.xt{border-collapse:collapse;background:#fff;color:#111;font-size:12px}
+table.xt td{border:1px solid #ccd;padding:3px 6px;max-width:260px}
+table.xt td.hl{background:#BAE6FD;outline:2px solid #0284C7}
+table.xt td.bad{background:#FECACA}
+/* results */
+.res{flex:1;overflow:auto;min-height:0}
+.sum{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.chip{font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid var(--line2);background:var(--panel2);cursor:pointer;color:var(--muted);user-select:none}
+.chip b{color:var(--text);margin-left:4px}
+.chip.on{border-color:var(--accent);color:var(--text)}
+.chip.ok b{color:var(--ok)} .chip.near b{color:var(--near)} .chip.bad b{color:var(--bad)} .chip.warn b{color:var(--warn)} .chip.info b{color:var(--info)}
+.row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;padding:7px 10px;border-bottom:1px solid #1E232C;cursor:pointer;align-items:start}
+.row:hover{background:#1A202A}
+.row.sel{background:#14283A;box-shadow:inset 3px 0 0 var(--accent)}
+.ic{width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px}
+.ic.ok{background:var(--ok-bg);color:var(--ok)} .ic.near{background:var(--near-bg);color:var(--near)}
+.ic.check{background:var(--warn-bg);color:var(--warn)} .ic.missing,.ic.banned{background:var(--bad-bg);color:var(--bad)}
+.ic.extra,.ic.restricted,.ic.word{background:var(--warn-bg);color:var(--warn)} .ic.guide{background:var(--info-bg);color:var(--info)}
+.nm{font-weight:500;word-break:break-word}
+.sub{color:var(--muted);font-size:12px;margin-top:2px;word-break:break-word}
+.sub .jp{color:#C7CCD6}
+.meta{color:var(--muted);font-size:12px;text-align:right;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:5px;margin:3px 4px 0 0;font-weight:500}
+.tag.bad{background:var(--bad-bg);color:var(--bad)} .tag.warn{background:var(--warn-bg);color:var(--warn)}
+.tag.ok{background:var(--ok-bg);color:var(--ok)} .tag.info{background:var(--info-bg);color:var(--info)}
+.tag.near{background:var(--near-bg);color:var(--near)} .tag.mut{background:var(--panel2);color:var(--muted)}
+.grp{padding:8px 10px 6px;font-size:12px;color:var(--muted);background:#12151B;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1;font-weight:600}
+.empty{color:var(--muted);padding:30px 18px;text-align:center;line-height:1.7}
+.detail{border-top:1px solid var(--line);max-height:46%;overflow:auto;padding:10px 12px;background:#12151B;display:none}
+.detail.on{display:block}
+.detail h4{margin:0 0 6px;font-size:14px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:3px 10px;font-size:12.5px;margin:6px 0}
+.kv div:nth-child(odd){color:var(--muted)}
+.hit{border:1px solid var(--line2);border-radius:8px;padding:8px 10px;margin:8px 0;background:var(--panel)}
+.hit.banned{border-color:#5A2326} .hit.restricted{border-color:#4A3A12} .hit.guide{border-color:#3A2F66}
+.uses{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.uses td,.uses th{border-top:1px solid var(--line);padding:4px 6px;vertical-align:top;text-align:left}
+.uses th{color:var(--muted);font-weight:500}
+a.lk{color:var(--accent);cursor:pointer;text-decoration:none}
+a.lk:hover{text-decoration:underline}
+.mid-actions{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center}
+footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;color:var(--dim);background:var(--panel);border-top:1px solid var(--line)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+.modal.on{display:flex}
+.mbox{background:var(--panel);border:1px solid var(--line2);border-radius:14px;width:min(1100px,94vw);height:min(860px,92vh);display:flex;flex-direction:column;overflow:hidden}
+.mbox .hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#1F2937;border:1px solid var(--line2);padding:10px 16px;border-radius:10px;display:none;z-index:60;max-width:70vw}
+.toast.on{display:block}
+.toast.err{border-color:#7F1D1D;background:#2C1517}
+.cos{font-size:12px;margin-top:4px}
+.mini{font-size:11px;color:var(--dim)}
+.sbar{display:flex;gap:8px;padding:10px;border-bottom:1px solid var(--line)}
+.sbar input{flex:1}
+.src{padding:10px 12px;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.6}
+.upd{padding:12px;display:flex;flex-direction:column;gap:10px}
+.bar{height:6px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+::-webkit-scrollbar{width:11px;height:11px} ::-webkit-scrollbar-thumb{background:#2A303B;border-radius:8px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9V3"/><path d="M7.5 15h9"/></svg>2NK <b>INCI Check</b></div>
+    <button class="tab on" data-p="p1">ฉลาก ↔ สูตร</button>
+    <button class="tab" data-p="p2">ตรวจสารห้ามใช้ อย.</button>
+    <button class="tab" data-p="p3">ฐานข้อมูล / อัปเดต</button>
+    <div class="sp"></div>
+    <div class="net"><span class="dot" id="netDot"></span><span id="netTxt">กำลังเชื่อมต่อ…</span></div>
+  </header>
+  <main>
+    <!-- ===== TAB 1 ===== -->
+    <section class="page on" id="p1">
+      <div class="card" id="cLabel">
+        <div class="hd"><span class="t">ฉลาก</span><span class="f" data-f></span><span class="pill" data-src hidden></span>
+          <div class="zoom"><button class="ghost" data-z="-">−</button><button class="ghost" data-z="fit">พอดี</button><button class="ghost" data-z="+">+</button></div>
+          <button data-pick>เลือกไฟล์</button></div>
+        <div class="vw"><div class="pages"></div>
+          <div class="drop"><div class="big">ลากไฟล์ฉลากมาวางที่นี่</div><div>PDF / รูปภาพ (JPG, PNG) — ไฟล์อาร์ตเวิร์กหรือรูปถ่ายฉลาก<br>ตัวอักษรที่เป็นรูปจะอ่านด้วย OCR อัตโนมัติ (ญี่ปุ่น / ไทย / อังกฤษ)</div><button data-pick>เลือกไฟล์ฉลาก</button></div>
+          <div class="busy"><div class="spin"></div><div data-msg></div></div></div>
+      </div>
+      <div class="card">
+        <div class="mid-actions"><button class="primary" id="btnCmp" disabled>ตรวจเทียบ</button>
+          <span class="mini" id="cmpHint">เลือกไฟล์ฉลาก (ซ้าย) และไฟล์สูตร (ขวา)</span><div class="sp"></div>
+          <button class="ghost" id="btnExp1" disabled title="บันทึกผลเป็น Excel">Excel</button></div>
+        <div class="sum" id="sum1"></div>
+        <div class="res" id="res1"><div class="empty">เลือกไฟล์ทั้งสองฝั่งแล้วกด “ตรวจเทียบ”<br>ชี้เมาส์ที่รายการเพื่อดูตำแหน่งบนฉลากและในสูตร</div></div>
+        <div class="detail" id="det1"></div>
+      </div>
+      <div class="card" id="cFormula">
+        <div class="hd"><span class="t">สูตร</span><span class="f" data-f></span><span class="pill" data-src hidden></span>
+          <div class="zoom"><button class="ghost" data-z="-">−</button><button class="ghost" data-z="fit">พอดี</button><button class="ghost" data-z="+">+</button></div>
+          <button data-pick>เลือกไฟล์</button></div>
+        <div class="vw"><div class="pages"></div>
+          <div class="drop"><div class="big">ลากไฟล์สูตรมาวางที่นี่</div><div>PDF ตารางสูตร (มีคอลัมน์ INCI / ชื่อสาร / %) หรือ Excel (.xlsx) / CSV</div><button data-pick>เลือกไฟล์สูตร</button></div>
+          <div class="busy"><div class="spin"></div><div data-msg></div></div></div>
+      </div>
+    </section>
+    <!-- ===== TAB 2 ===== -->
+    <section class="page" id="p2">
+      <div class="card" id="cReg">
+        <div class="hd"><span class="t">ไฟล์ที่ตรวจ</span><span class="f" data-f></span><span class="pill" data-src hidden></span>
+          <div class="zoom"><button class="ghost" data-z="-">−</button><button class="ghost" data-z="fit">พอดี</button><button class="ghost" data-z="+">+</button></div>
+          <button data-pick>เลือกไฟล์</button></div>
+        <div class="vw"><div class="pages"></div>
+          <div class="drop"><div class="big">ลากไฟล์สูตรหรือฉลากมาวางที่นี่</div><div>ตรวจกับ บัญชีวัตถุห้ามใช้ / วัตถุที่อาจใช้ (มีเงื่อนไข) / คำห้ามใช้ ของ อย.<br>และตรวจชื่อสารกับฐานข้อมูล CosIng (EU)</div><button data-pick>เลือกไฟล์</button></div>
+          <div class="busy"><div class="spin"></div><div data-msg></div></div></div>
+      </div>
+      <div class="card">
+        <div class="mid-actions"><span class="mini" id="regHint">ยังไม่ได้เลือกไฟล์</span><div class="sp"></div>
+          <button class="ghost" id="btnCos" disabled>ตรวจชื่อ CosIng ใหม่</button>
+          <button class="ghost" id="btnExp2" disabled>Excel</button></div>
+        <div class="sum" id="sum2"></div>
+        <div class="res" id="res2"><div class="empty">เลือกไฟล์ทางซ้ายเพื่อเริ่มตรวจ<br>ชี้เมาส์ที่สารเพื่อไฮไลต์ตำแหน่งในไฟล์ · คลิกเพื่อดูรายละเอียดและหน้าประกาศ</div></div>
+        <div class="detail" id="det2"></div>
+      </div>
+    </section>
+    <!-- ===== TAB 3 ===== -->
+    <section class="page" id="p3">
+      <div class="card">
+        <div class="sbar"><input id="q" placeholder="ค้นหาชื่อสาร หรือเลข CAS เช่น hydroquinone, 123-31-9, ไวท์เทนนิ่ง"><button id="btnQ">ค้นหา</button></div>
+        <div class="res" id="res3"><div class="empty">ค้นหาในฐานข้อมูลที่ตั้งค่าไว้ในโปรแกรม (จากเอกสาร อย. ที่ให้มา)</div></div>
+      </div>
+      <div class="card">
+        <div class="hd"><span class="t">ฐานข้อมูลที่ใช้ตรวจ</span></div>
+        <div class="src" id="srcInfo"></div>
+        <div class="hd"><span class="t">อัปเดต</span></div>
+        <div class="upd">
+          <div class="mini" id="updInfo">กำลังตรวจสอบเวอร์ชัน…</div>
+          <button id="btnUpdDb" disabled>อัปเดตฐานข้อมูล</button>
+          <button id="btnUpdApp" class="primary" disabled>อัปเดตโปรแกรม</button>
+          <div class="bar"><i id="updBar"></i></div>
+          <button class="ghost" id="btnRecheck">ตรวจสอบอีกครั้ง</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer><span id="ver"></span><span id="dbv"></span><div class="sp"></div><span>ข้อมูลอ้างอิง: ประกาศกระทรวงสาธารณสุข / CosIng (European Commission)</span></footer>
+</div>
+
+<div class="modal" id="mReg"><div class="mbox">
+  <div class="hd"><div style="flex:1;min-width:0"><div class="t" id="mTitle"></div><div class="mini" id="mSub"></div></div>
+    <button class="ghost" id="mPrev">‹ หน้าก่อน</button><button class="ghost" id="mNext">หน้าถัดไป ›</button><button id="mClose">ปิด</button></div>
+  <div class="vw" id="mVw"><div class="pages"></div></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let api=null;
+const S={label:null,formula:null,cmp:null,reg:null,sel1:null,sel2:null,f1:'all',f2:'all',cos:{},online:null};
+
+function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',err?6000:2600)}
+
+/* ---------------- viewer ---------------- */
+class Viewer{
+  constructor(card,slot){this.card=card;this.slot=slot;this.vw=$('.vw',card);this.pagesEl=$('.pages',this.vw);this.zoom=1;this.view=null;
+    $$('[data-z]',card).forEach(b=>b.onclick=()=>this.setZoom(b.dataset.z));
+    this.vw.addEventListener('wheel',e=>{if(e.ctrlKey){e.preventDefault();this.setZoom(e.deltaY<0?'+':'-')}},{passive:false});}
+  busy(msg){const b=$('.busy',this.vw);b.classList.toggle('on',!!msg);$('[data-msg]',b).textContent=msg||''}
+  set(view){this.view=view;this.zoom=1;this.table=null;const dr=$('.drop',this.vw);if(dr)dr.style.display='none';
+    const fl=$('[data-f]',this.card);if(fl)fl.textContent=view.name;
+    const src=$('.hd [data-src]',this.card);if(src){src.hidden=false;src.className='pill'+(view.source==='ocr'?' ocr':'');
+      src.textContent=view.source==='ocr'?'อ่านด้วย OCR':view.source==='table'?'ตาราง':'ข้อความในไฟล์'}
+    this.render()}
+  fitW(){return Math.max(200,this.vw.clientWidth-28)}
+  render(){const v=this.view;this.pagesEl.innerHTML='';this.pg=[];
+    if(!v)return;
+    if(v.kind==='table'){const t=document.createElement('table');t.className='xt';
+      v.rows.forEach((r,ri)=>{const tr=t.insertRow();r.forEach((c,ci)=>{const td=tr.insertCell();td.textContent=c;td.dataset.k=ri+','+ci})});
+      this.pagesEl.appendChild(t);this.table=t;this.pagesEl.style.alignItems='flex-start';return}
+    this.pagesEl.style.alignItems='center';
+    v.pages.forEach((p,i)=>{const d=document.createElement('div');d.className='pg';const w=this.fitW()*this.zoom;
+      d.style.width=w+'px';d.style.height=(w*p.h/p.w)+'px';d.innerHTML=`<img src="${p.img}"><div class="ov"></div>`;
+      this.pagesEl.appendChild(d);this.pg.push({el:d,ov:$('.ov',d),w:p.w,h:p.h})});}
+  setZoom(z){if(!this.view||this.view.kind==='table')return;const old=this.zoom;
+    this.zoom=z==='fit'?1:z==='+'?Math.min(8,this.zoom*1.25):Math.max(.3,this.zoom/1.25);
+    const sx=(this.vw.scrollLeft+this.vw.clientWidth/2)/(this.pagesEl.scrollWidth||1),sy=(this.vw.scrollTop+this.vw.clientHeight/2)/(this.pagesEl.scrollHeight||1);
+    this.pg.forEach(p=>{const w=this.fitW()*this.zoom;p.el.style.width=w+'px';p.el.style.height=(w*p.h/p.w)+'px'});
+    this.vw.scrollLeft=sx*this.pagesEl.scrollWidth-this.vw.clientWidth/2;this.vw.scrollTop=sy*this.pagesEl.scrollHeight-this.vw.clientHeight/2;
+    this.redraw()}
+  clear(cls){if(this.table){$$('td.'+(cls||'hl'),this.table).forEach(td=>td.classList.remove(cls||'hl'));}
+    (this.pg||[]).forEach(p=>$$('.box'+(cls?'.k-'+cls:''),p.ov).forEach(b=>b.remove()));this._marks=this._marks||{};if(cls)delete this._marks[cls];else this._marks={}}
+  mark(marks,cls='hl',scroll=true){this.clear(cls);if(!marks||!marks.length)return;this._marks=this._marks||{};this._marks[cls]=marks;this.draw(marks,cls);
+    if(scroll)this.scrollTo(marks)}
+  redraw(){const m=this._marks||{};Object.keys(m).forEach(k=>{(this.pg||[]).forEach(p=>$$('.box.k-'+k,p.ov).forEach(b=>b.remove()));this.draw(m[k],k)})}
+  draw(marks,cls){for(const m of marks){
+      if(m.cell){const td=this.table&&$(`td[data-k="${m.cell[0]},${m.cell[1]}"]`,this.table);if(td)td.classList.add(cls==='bad'?'bad':'hl');continue}
+      const p=this.pg[m.page];if(!p)continue;const r=m.rect,pad=1.2;const b=document.createElement('div');b.className='box '+cls+' k-'+cls;
+      b.style.left=((r[0]-pad)/p.w*100)+'%';b.style.top=((r[1]-pad)/p.h*100)+'%';
+      b.style.width=((r[2]-r[0]+pad*2)/p.w*100)+'%';b.style.height=((r[3]-r[1]+pad*2)/p.h*100)+'%';p.ov.appendChild(b)}}
+  scrollTo(marks){const m=marks[0];if(!m)return;
+    if(m.cell){const td=this.table&&$(`td[data-k="${m.cell[0]},${m.cell[1]}"]`,this.table);if(td)td.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});return}
+    const p=this.pg[m.page];if(!p)return;
+    // พื้นที่ทั้งหมดของกล่อง
+    const xs=marks.filter(x=>x.page===m.page).map(x=>x.rect);
+    const r=[Math.min(...xs.map(a=>a[0])),Math.min(...xs.map(a=>a[1])),Math.max(...xs.map(a=>a[2])),Math.max(...xs.map(a=>a[3]))];
+    const sc=p.el.clientWidth/p.w, vr=this.vw.getBoundingClientRect(), pr=p.el.getBoundingClientRect();
+    const x0=pr.left-vr.left+this.vw.scrollLeft+r[0]*sc, y0=pr.top-vr.top+this.vw.scrollTop+r[1]*sc, x1=x0+(r[2]-r[0])*sc, y1=y0+(r[3]-r[1])*sc;
+    const vx0=this.vw.scrollLeft,vy0=this.vw.scrollTop,vx1=vx0+this.vw.clientWidth,vy1=vy0+this.vw.clientHeight;
+    if(x0<vx0+20||x1>vx1-20||y0<vy0+20||y1>vy1-20)
+      this.vw.scrollTo({left:(x0+x1)/2-this.vw.clientWidth/2,top:(y0+y1)/2-this.vw.clientHeight/2,behavior:'smooth'})}
+  fitBlock(marks){ // ซูมให้บล็อกรายการส่วนประกอบเต็มความกว้าง
+    const ms=(marks||[]).filter(x=>x.rect&&x.page===(marks.find(y=>y.rect)||{}).page);if(!ms.length)return;
+    const p=this.pg[ms[0].page],x0=Math.min(...ms.map(m=>m.rect[0])),x1=Math.max(...ms.map(m=>m.rect[2]));
+    const want=Math.min(8,Math.max(1,0.8*p.w/Math.max(40,x1-x0)));this.zoom=want;
+    this.pg.forEach(q=>{const w=this.fitW()*this.zoom;q.el.style.width=w+'px';q.el.style.height=(w*q.h/q.w)+'px'});this.redraw();
+    requestAnimationFrame(()=>{const y0=Math.min(...ms.map(m=>m.rect[1])),y1=Math.max(...ms.map(m=>m.rect[3]));
+      const sc=p.el.clientWidth/p.w,vr=this.vw.getBoundingClientRect(),pr=p.el.getBoundingClientRect();
+      this.vw.scrollLeft=pr.left-vr.left+this.vw.scrollLeft+((x0+x1)/2)*sc-this.vw.clientWidth/2;
+      this.vw.scrollTop=pr.top-vr.top+this.vw.scrollTop+((y0+y1)/2)*sc-this.vw.clientHeight/2})}
+  focusMarks(marks){ // ซูมเข้าไปที่ตำแหน่ง (ตัวอักษรเล็กมาก)
+    const m=marks&&marks.find(x=>x.rect);if(!m)return;const p=this.pg[m.page];const hpx=(m.rect[3]-m.rect[1])*p.el.clientWidth/p.w;
+    if(hpx<14){this.zoom=Math.min(8,this.zoom*Math.max(1.25,16/Math.max(hpx,1)));this.pg.forEach(q=>{const w=this.fitW()*this.zoom;q.el.style.width=w+'px';q.el.style.height=(w*q.h/q.w)+'px'});this.redraw()}
+    this.scrollTo(marks)}
+}
+
+const V={label:new Viewer($('#cLabel'),'label'),formula:new Viewer($('#cFormula'),'formula'),reg:new Viewer($('#cReg'),'reg'),
+  modal:new Viewer($('#mReg .mbox'),'modal')};
+window.addEventListener('resize',()=>Object.values(V).forEach(v=>{if(v.view&&v.view.kind!=='table'){v.pg.forEach(p=>{const w=v.fitW()*v.zoom;p.el.style.width=w+'px';p.el.style.height=(w*p.h/p.w)+'px'})}}));
+function onProgress(slot,msg){const v=V[slot];if(v)v.busy(msg)}
+function onUpdateProgress(what,p){$('#updBar').style.width=p+'%'}
+
+/* ---------------- tabs ---------------- */
+$$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.toggle('on',x===t));$$('.page').forEach(p=>p.classList.toggle('on',p.id===t.dataset.p));
+  Object.values(V).forEach(v=>{if(v.view&&v.view.kind!=='table')v.pg.forEach(p=>{const w=v.fitW()*v.zoom;p.el.style.width=w+'px';p.el.style.height=(w*p.h/p.w)+'px'})})});
+
+/* ---------------- loading files ---------------- */
+async function loadFile(slot,path,b64name,b64){
+  const v=V[slot];v.busy('กำลังเปิดไฟล์…');
+  const r=b64?await api.load_bytes(slot,b64name,b64,{}):await api.load(slot,path,{});
+  v.busy('');
+  if(!r.ok){toast(r.error||'เปิดไฟล์ไม่ได้',true);return}
+  v.set(r.view);
+  if(r.warn)toast(r.warn,true);
+  if(slot==='label'){S.label=r.label;if(!r.label.items.length)toast(r.label.error||'ไม่พบรายการส่วนประกอบบนฉลาก',true);
+    const all=r.label.items.flatMap(i=>i.marks);V.label.mark(all,'soft',false);if(all.length)V.label.fitBlock(all);S.cmp=null}
+  if(slot==='formula'){S.formula=r.formula;S.cmp=null;
+    if(r.formula&&r.formula.length) V.formula.mark(r.formula.flatMap(f=>f.marks.inci||f.marks.jp||[]),'soft',false)}
+  if(slot==='reg'){S.reg=r.reg;S.sel2=null;renderReg();runCosing();
+    if(r.reg.mode==='label'&&r.view.kind!=='table'){const all=r.reg.items.flatMap(i=>i.marks);if(all.length)V.reg.fitBlock(all)}}
+  updCmpBtn();
+  if((slot==='label'||slot==='formula')&&S.label&&S.formula&&S.label.items.length&&S.formula.length)doCompare();
+}
+function pickFor(slot){return async()=>{const p=await api.pick_file();if(p)loadFile(slot,p)}}
+[['label','#cLabel'],['formula','#cFormula'],['reg','#cReg']].forEach(([slot,sel])=>{
+  const card=$(sel);$$('[data-pick]',card).forEach(b=>b.onclick=pickFor(slot));
+  const vw=$('.vw',card);
+  vw.addEventListener('dragover',e=>{e.preventDefault();vw.classList.add('dragging')});
+  vw.addEventListener('dragleave',()=>vw.classList.remove('dragging'));
+  vw.addEventListener('drop',e=>{e.preventDefault();vw.classList.remove('dragging');const f=e.dataTransfer.files[0];if(!f)return;
+    const rd=new FileReader();rd.onload=()=>loadFile(slot,null,f.name,rd.result);rd.readAsDataURL(f)});
+});
+function updCmpBtn(){const ok=S.label&&S.formula;$('#btnCmp').disabled=!ok;
+  $('#cmpHint').textContent=ok?`ฉลาก ${S.label.items.length} รายการ · สูตร ${S.formula.length} รายการ`:'เลือกไฟล์ฉลาก (ซ้าย) และไฟล์สูตร (ขวา)'}
+
+/* ---------------- TAB 1 compare ---------------- */
+const ST={ok:['✓','ตรงกัน','ok'],near:['≈','สะกดต่างเล็กน้อย','near'],check:['?','ควรตรวจ','warn'],missing:['✕','ไม่มีบนฉลาก','bad'],extra:['+','บนฉลากแต่ไม่มีในสูตร','warn']};
+$('#btnCmp').onclick=doCompare;
+async function doCompare(){const r=await api.compare();if(!r.ok){toast(r.error,true);return}
+  S.cmp=r;S.label.items=r.items;S.sel1=null;$('#btnExp1').disabled=false;
+  V.label.clear();V.formula.clear();renderCmp()}
+function renderCmp(){const r=S.cmp;if(!r)return;const s=r.summary;
+  const chips=[['all','ทั้งหมด',r.results.length,''],['ok','ตรงกัน',s.ok,'ok'],['near','สะกดต่าง',s.near+s.check,'near'],['missing','ไม่มีบนฉลาก',s.missing,'bad'],['extra','ไม่มีในสูตร',s.extra,'warn'],['order','ลำดับ',s.order,'info']];
+  $('#sum1').innerHTML=chips.map(([k,t,n,c])=>`<span class="chip ${c} ${S.f1===k?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
+  $$('#sum1 .chip').forEach(c=>c.onclick=()=>{S.f1=c.dataset.k;renderCmp()});
+  const f=S.f1, list=r.results.map((x,i)=>[x,i]).filter(([x])=>f==='all'||(f==='near'?(x.status==='near'||x.status==='check'):f==='order'?!!x.order_warn:x.status===f));
+  // เรียง: ปัญหาก่อน แล้วตามลำดับในสูตร
+  const pr={missing:0,extra:1,check:2,near:3,ok:4};
+  list.sort((a,b)=>(pr[a[0].status]-pr[b[0].status])||((a[0].f??999)-(b[0].f??999)));
+  $('#res1').innerHTML=list.length?list.map(([x,i])=>{const st=ST[x.status],fr=x.formula;
+      const name=fr?(fr.inci||fr.jp||fr.th):x.label_text;
+      const sub=[];if(fr&&fr.jp&&fr.inci)sub.push(`<span class="jp">${esc(fr.jp)}</span>`);
+      if(x.status!=='ok'&&x.status!=='missing'&&x.label_text)sub.push('บนฉลาก: <b>'+esc(x.label_text)+'</b>');
+      if(x.status==='extra'&&x.suggest)sub.push('ใกล้เคียงในสูตร: '+esc(x.suggest));
+      const tags=`<span class="tag ${st[2]}">${st[1]}${x.status==='near'||x.status==='check'?' '+Math.round(x.score)+'%':''}</span>`+(x.order_warn?'<span class="tag info">ลำดับ</span>':'');
+      return `<div class="row ${S.sel1===i?'sel':''}" data-i="${i}"><div class="ic ${x.status}">${st[0]}</div>
+        <div><div class="nm">${esc(name)}</div><div class="sub">${sub.join(' · ')}</div>${tags}</div>
+        <div class="meta">${fr?'#'+(fr.idx+1):''}${fr&&fr.pct!=null?'<br>'+fmtPct(fr.pct):''}</div></div>`}).join('')
+    :'<div class="empty">ไม่มีรายการในกลุ่มนี้</div>';
+  $$('#res1 .row').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover1(i);el.onclick=()=>select1(i)});
+  $('#res1').onmouseleave=()=>{if(S.sel1!=null)hover1(S.sel1,false);else{V.label.clear('hl');V.formula.clear('hl');V.label.clear('bad')}};
+}
+function fmtPct(p){if(p>=1)return p.toFixed(2)+'%';if(p<=0)return '0%';const d=Math.min(10,Math.max(2,1-Math.floor(Math.log10(p))));return p.toFixed(d).replace(/0+$/,'')+'%'}
+function marks1(x){const lm=x.l!=null?S.cmp.items[x.l].marks:[];const fr=x.formula;
+  const fm=fr?[...(fr.marks.inci||[]),...(fr.marks.jp||[]),...(fr.marks.th||[])]:[];return [lm,fm.length?fm:(fr?fr.row_marks:[])]}
+function hover1(i,scroll=true){const x=S.cmp.results[i];const [lm,fm]=marks1(x);
+  V.label.mark(lm,x.status==='extra'?'warn':'hl',scroll);V.formula.mark(fm,x.status==='missing'?'bad':'hl',scroll)}
+function select1(i){S.sel1=i;$$('#res1 .row').forEach(e=>e.classList.toggle('sel',+e.dataset.i===i));hover1(i);
+  const x=S.cmp.results[i],fr=x.formula,d=$('#det1');d.classList.add('on');
+  const [lm]=marks1(x);
+  let h=`<h4>${esc(fr?(fr.inci||fr.label):x.label_text)}</h4><div class="kv">`;
+  if(fr){h+=`<div>ลำดับในสูตร</div><div>${fr.idx+1}</div>`;if(fr.jp)h+=`<div>ชื่อญี่ปุ่น</div><div>${esc(fr.jp)}</div>`;
+    if(fr.th)h+=`<div>ชื่อไทย</div><div>${esc(fr.th)}</div>`;if(fr.inci)h+=`<div>INCI</div><div>${esc(fr.inci)}</div>`;
+    if(fr.cas_text)h+=`<div>CAS</div><div>${esc(fr.cas_text)}</div>`;if(fr.func)h+=`<div>หน้าที่</div><div>${esc(fr.func)}</div>`;
+    if(fr.pct!=null)h+=`<div>ปริมาณ</div><div>${fr.pct}%</div>`}
+  h+=`<div>บนฉลาก</div><div>${x.label_text?esc(x.label_text)+(x.l!=null?` (ลำดับที่ ${x.l+1})`:''):'<span style="color:var(--bad)">ไม่พบบนฉลาก</span>'}</div></div>`;
+  if(x.order_warn)h+=`<div class="tag info" style="display:block;margin:6px 0;padding:6px 8px">${esc(x.order_warn)}</div>`;
+  if(x.status==='missing')h+=`<div class="sub">ไม่พบชื่อนี้ในรายการส่วนประกอบบนฉลาก — ถ้าเป็นสารติดมากับวัตถุดิบ (carry-over) อาจไม่ต้องแสดง แต่ควรตรวจสอบ</div>`;
+  if(lm.length)h+=`<div style="margin-top:8px"><a class="lk" id="zoomL">ซูมไปที่ตำแหน่งบนฉลาก</a></div>`;
+  const inci=fr&&fr.inci?fr.inci:(/[A-Za-z]{3}/.test(x.label_text)?x.label_text:'');
+  if(inci)h+=`<div class="cos" id="cos1"><span class="mini">กำลังค้น CosIng…</span></div>`;
+  d.innerHTML=h;const z=$('#zoomL');if(z)z.onclick=()=>V.label.focusMarks(lm);
+  if(inci)cosLookup(inci).then(c=>{const el=$('#cos1');if(el&&S.sel1===i)el.innerHTML=cosHtml(c,inci)});
+}
+
+/* ---------------- CosIng ---------------- */
+function cosLookup(name){const k=name.toUpperCase().trim();if(!S.cos[k])S.cos[k]=api.cosing(name).then(r=>{S.online=r.status!=='error'||S.online;setNet();return r});return S.cos[k]}
+function cosHtml(c,name){if(!c)return'';
+  if(c.status==='error')return `<span class="tag mut">CosIng: เชื่อมต่อไม่ได้</span> <span class="mini">${esc(c.error||'')}</span>`;
+  const link=id=>id?`<a class="lk" onclick="api.open_url('https://ec.europa.eu/growth/tools-databases/cosing/details/${id}')">เปิดใน CosIng ↗</a>`:'';
+  if(c.status==='exact'){const b=c.best;
+    return `<div><span class="tag ok">ชื่อถูกต้องตาม CosIng</span> ${link(b.id)}</div><div class="kv">
+      <div>INCI</div><div>${esc(b.inci)}</div>${b.cas.length?`<div>CAS</div><div>${esc(b.cas.join(', '))}</div>`:''}
+      ${b.functions.length?`<div>หน้าที่ (EU)</div><div>${esc(b.functions.join(', '))}</div>`:''}
+      ${b.annex.length?`<div>Annex EU</div><div>${esc(b.annex.join(', '))}${b.max.length?' · สูงสุด '+esc(b.max.join(', ')):''}</div>`:''}
+      ${b.other.length?`<div>ข้อจำกัดอื่น</div><div>${esc(b.other.join('; '))}</div>`:''}</div>`}
+  const sug=(c.suggestions||[]).slice(0,4).map(s=>`<div>• ${esc(s.inci)} ${s.cas.length?'<span class="mini">CAS '+esc(s.cas[0])+'</span>':''} ${link(s.id)}</div>`).join('');
+  return `<div><span class="tag ${c.status==='differs'?'near':'bad'}">${c.status==='differs'?'ชื่อไม่ตรงกับ CosIng':'ไม่พบใน CosIng'}</span></div>${sug?'<div class="mini" style="margin:4px 0">ชื่อที่ใกล้เคียงใน CosIng:</div>'+sug:''}`}
+
+/* ---------------- TAB 2 regulation ---------------- */
+const LV={banned:['!','ห้ามใช้','bad'],restricted:['⚠','วัตถุที่อาจใช้ (มีเงื่อนไข)','warn'],guide:['i','มีในหลักเกณฑ์ อย.','info'],ok:['✓','ไม่พบในบัญชี','ok']};
+function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
+  $('#regHint').textContent=(r.mode==='formula'?'อ่านจากตารางสูตร':'อ่านจากรายการส่วนประกอบบนฉลาก')+` · ${r.items.length} รายการ`;
+  $('#btnCos').disabled=false;$('#btnExp2').disabled=false;
+  if(r.error)toast(r.error,true);
+  const cosBad=r.items.filter(it=>{const c=S.cos[(it.name||'').toUpperCase().trim()];return it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error'}).length;
+  const chips=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['cos','ชื่อไม่ตรง CosIng',cosBad,'near'],['ok','ผ่าน',s.ok,'ok']];
+  $('#sum2').innerHTML=chips.map(([k,t,n,c])=>`<span class="chip ${c} ${S.f2===k?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
+  $$('#sum2 .chip').forEach(c=>c.onclick=()=>{S.f2=c.dataset.k;renderReg()});
+  const f=S.f2;let h='';
+  const order=['banned','restricted','guide','ok'];
+  if(f==='all'||f==='words'){if(r.words.length)h+=`<div class="grp">คำห้ามใช้ในชื่อ/ข้อความบนฉลาก (${r.words.length})</div>`+r.words.map((w,i)=>
+      `<div class="row ${S.sel2==='w'+i?'sel':''}" data-w="${i}"><div class="ic word">!</div><div><div class="nm">“${esc(w.found)}”</div>
+       <div class="sub">${esc(w.line)}</div><span class="tag warn">คำห้ามใช้ ลำดับ ${w.word.no}: ${esc(w.word.word)}</span></div><div class="meta">หน้า ${w.word.page}</div></div>`).join('')}
+  if(f!=='words')for(const lv of order){
+    const items=r.items.map((it,i)=>[it,i]).filter(([it])=>it.level===lv&&(f==='all'||f===lv||(f==='cos'&&it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error')));
+    if(!items.length)continue;
+    h+=`<div class="grp">${LV[lv][1]} (${items.length})</div>`+items.map(([it,i])=>{
+      const tags=it.hits.map(hh=>hh.kind==='banned'?`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}${hh.entry.superseded?' (ฉบับเดิม)':''}</span>`
+        :`<span class="tag warn">อาจใช้ ลำดับ ${hh.entry.no}</span>`).join('')+(it.guide.length?`<span class="tag info">หลักเกณฑ์ หน้า ${[...new Set(it.guide.map(g=>g.page))].join(', ')}</span>`:'')
+        +overTag(it)+cosTag(it);
+      return `<div class="row ${S.sel2===i?'sel':''}" data-i="${i}"><div class="ic ${lv}">${LV[lv][0]}</div><div><div class="nm">${esc(it.name)}</div>
+        ${it.jp?`<div class="sub"><span class="jp">${esc(it.jp)}</span></div>`:''}${tags}</div>
+        <div class="meta">${it.cas.length?esc(it.cas[0]):''}${it.pct!=null?'<br>'+fmtPct(it.pct):''}</div></div>`}).join('')}
+  $('#res2').innerHTML=h||'<div class="empty">ไม่มีรายการในกลุ่มนี้</div>';
+  $$('#res2 .row[data-i]').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover2(i);el.onclick=()=>select2(i)});
+  $$('#res2 .row[data-w]').forEach(el=>{const i=+el.dataset.w;el.onmouseenter=()=>V.reg.mark(S.reg.words[i].marks,'warn');el.onclick=()=>selectW(i)});
+}
+function maxPct(s){const m=String(s||'').match(/(\d+(?:\.\d+)?)\s*%/);return m?parseFloat(m[1]):null}
+function overInfo(it){if(it.pct==null)return null;let lim=[];for(const h of it.hits)if(h.kind==='restricted')for(const u of h.entry.uses){const m=maxPct(u.max);if(m!=null)lim.push(m)}
+  if(!lim.length)return null;const mx=Math.max(...lim),mn=Math.min(...lim);return it.pct>mx?'over':it.pct>mn?'maybe':null}
+function overTag(it){const o=overInfo(it);return o==='over'?'<span class="tag bad">ปริมาณเกินกำหนด</span>':o==='maybe'?'<span class="tag warn">อาจเกินกำหนด (ขึ้นกับประเภทผลิตภัณฑ์)</span>':''}
+function cosTag(it){const c=it._cos;if(!it.latin)return '';if(!c)return '<span class="tag mut">CosIng…</span>';
+  return c.status==='exact'?'<span class="tag ok">CosIng ✓</span>':c.status==='error'?'<span class="tag mut">CosIng ออฟไลน์</span>':
+    `<span class="tag near">${c.status==='differs'?'ชื่อไม่ตรง CosIng':'ไม่พบใน CosIng'}</span>`}
+function hover2(i,scroll=true){const it=S.reg.items[i];V.reg.mark(it.marks,it.level==='banned'?'bad':it.level==='restricted'?'warn':'hl',scroll)}
+function select2(i){S.sel2=i;$$('#res2 .row').forEach(e=>e.classList.toggle('sel',e.dataset.i==String(i)));hover2(i);
+  const it=S.reg.items[i],d=$('#det2');d.classList.add('on');
+  let h=`<h4>${esc(it.name)}</h4><div class="kv">${it.jp?`<div>ชื่อญี่ปุ่น</div><div>${esc(it.jp)}</div>`:''}${it.cas.length?`<div>CAS</div><div>${esc(it.cas.join(', '))}</div>`:''}
+    ${it.pct!=null?`<div>ปริมาณในสูตร</div><div>${it.pct}%</div>`:''}</div><div style="margin:4px 0"><a class="lk" id="zoomR">ซูมไปที่ตำแหน่งในไฟล์</a></div>`;
+  if(!it.hits.length&&!it.guide.length)h+=`<div class="sub">ไม่พบในบัญชีวัตถุห้ามใช้ / วัตถุที่อาจใช้ ที่ตั้งค่าไว้ (หมายเหตุ: บัญชีวัตถุกันเสีย สี และสารป้องกันแสงแดด ของไทยไม่ได้อยู่ในเอกสารชุดนี้ — ดูข้อมูล EU จาก CosIng ด้านล่าง)</div>`;
+  it.hits.forEach((hh,k)=>{const e=hh.entry;
+    if(hh.kind==='banned')h+=`<div class="hit banned"><span class="tag bad">วัตถุห้ามใช้ ลำดับ ${esc(e.no)}</span>${e.superseded?'<span class="tag mut">ถูกแก้ไขภายหลัง</span>':''} <span class="mini">พบโดย ${esc(hh.how)}</span>
+      <div style="margin:6px 0">${esc(e.name)}</div>${e.cas.length?`<div class="mini">CAS ${esc(e.cas.join(', '))}</div>`:''}
+      <div class="mini">${esc(e.src)} · หน้า ${e.page}</div><a class="lk" data-src="${k}">ดูในประกาศ ›</a></div>`;
+    else h+=`<div class="hit restricted"><span class="tag warn">วัตถุที่อาจใช้ ลำดับ ${esc(e.no)}</span> <span class="mini">พบโดย ${esc(hh.how)}</span>
+      <div style="margin:6px 0">${esc(e.chem)}${e.inci&&e.inci!=='-'?' <span class="mini">('+esc(e.inci)+')</span>':''}</div>
+      <table class="uses"><tr><th>บริเวณที่ใช้ / การนำไปใช้</th><th>สูงสุด</th><th>เงื่อนไข</th></tr>${e.uses.map(u=>`<tr><td>${esc(u.area)}</td><td>${esc(u.max)}</td><td>${esc(u.cond)}</td></tr>`).join('')}</table>
+      <div class="mini" style="margin-top:4px">${esc(e.src)} · หน้า ${e.page}</div><a class="lk" data-src="${k}">ดูในประกาศ ›</a></div>`});
+  it.guide.forEach((g,k)=>{h+=`<div class="hit guide"><span class="tag info">หลักเกณฑ์/คำห้ามใช้ อย. หน้า ${g.page}</span><div style="margin:6px 0">${esc(g.line)}</div><a class="lk" data-g="${k}">ดูในเอกสาร ›</a></div>`});
+  if(it.latin)h+=`<div class="cos" id="cos2"><span class="mini">กำลังค้น CosIng…</span></div>`;
+  d.innerHTML=h;$('#zoomR').onclick=()=>V.reg.focusMarks(it.marks);
+  $$('[data-src]',d).forEach(a=>a.onclick=()=>{const e=it.hits[+a.dataset.src].entry;openReg(e.file,e.page,e.rect,e.no)});
+  $$('[data-g]',d).forEach(a=>a.onclick=()=>{const g=it.guide[+a.dataset.g];openReg('forbidden-words.pdf',g.page,g.rect,'')});
+  if(it.latin)cosLookup(it.name).then(c=>{const el=$('#cos2');if(el&&S.sel2===i)el.innerHTML=cosHtml(c,it.name)});
+}
+function selectW(i){S.sel2='w'+i;const w=S.reg.words[i];V.reg.mark(w.marks,'warn');const d=$('#det2');d.classList.add('on');
+  d.innerHTML=`<h4>คำห้ามใช้: “${esc(w.word.word)}”</h4><div class="sub">พบในข้อความ: ${esc(w.line)}</div>
+   <div class="sub" style="margin-top:6px">คำนี้อยู่ในรายการ “คำที่ห้ามนำมาใช้เป็นชื่อหรือส่วนหนึ่งของชื่อการค้าและชื่อเครื่องสำอาง” (ลำดับ ${w.word.no}) — ตรวจว่าเป็นส่วนของชื่อหรือข้อความกล่าวอ้างหรือไม่</div>
+   <div style="margin-top:8px"><a class="lk" id="zw">ซูมไปที่ตำแหน่ง</a> · <a class="lk" id="ow">ดูในเอกสาร ›</a></div>`;
+  $('#zw').onclick=()=>V.reg.focusMarks(w.marks);$('#ow').onclick=()=>openReg(w.word.file,w.word.page,w.word.rect,'')}
+let cosRun=0;
+async function runCosing(force){const r=S.reg;if(!r)return;const my=++cosRun;
+  if(force){r.items.forEach(it=>{delete it._cos;delete S.cos[(it.name||'').toUpperCase().trim()]})}
+  const q=r.items.filter(it=>it.latin&&!it._cos);let k=0;
+  const worker=async()=>{while(k<q.length&&my===cosRun){const it=q[k++];it._cos=await cosLookup(it.name);if(my===cosRun)renderRegLight()}};
+  await Promise.all([worker(),worker(),worker(),worker()])}
+let rT=null;function renderRegLight(){clearTimeout(rT);rT=setTimeout(()=>{const st=$('#res2').scrollTop;renderReg();$('#res2').scrollTop=st},150)}
+$('#btnCos').onclick=()=>runCosing(true);
+
+/* ---------------- regulation page modal ---------------- */
+let MR=null;
+async function openReg(file,page,rect,no){MR={file,page,rect};$('#mReg').classList.add('on');await showRegPage()}
+async function showRegPage(){const r=await api.reg_page(MR.file,MR.page,MR.rect);if(!r.ok){toast(r.error,true);return}
+  MR.pages=r.pages;$('#mTitle').textContent=r.title;$('#mSub').textContent='หน้า '+MR.page+' / '+r.pages;
+  V.modal.set({kind:'pdf',name:'',pages:[{w:r.w,h:r.h,img:r.img}],source:'text'});
+  if(!MR.p0)MR.p0=MR.page;
+  if(MR.rect&&MR.page===MR.p0)V.modal.mark([{page:0,rect:MR.rect}],'hl')}
+$('#mClose').onclick=()=>{$('#mReg').classList.remove('on');MR=null;V.modal.clear()};
+$('#mReg').onclick=e=>{if(e.target.id==='mReg')$('#mClose').click()};
+$('#mPrev').onclick=()=>{if(MR&&MR.page>1){MR.page--;showRegPage()}};
+$('#mNext').onclick=()=>{if(MR&&MR.page<MR.pages){MR.page++;showRegPage()}};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#mClose').click()});
+
+/* ---------------- TAB 3 DB ---------------- */
+$('#btnQ').onclick=dbSearch;$('#q').onkeydown=e=>{if(e.key==='Enter')dbSearch()};
+async function dbSearch(){const r=await api.db_search($('#q').value);
+  $('#res3').innerHTML=r.length?r.map((x,i)=>{const e=x.entry;
+    if(x.kind==='banned')return `<div class="row" data-i="${i}"><div class="ic banned">!</div><div><div class="nm">${esc(e.name)}</div><div class="sub">วัตถุห้ามใช้ ลำดับ ${esc(e.no)} ${e.cas.length?'· CAS '+esc(e.cas.join(', ')):''}</div></div><div class="meta">หน้า ${e.page}</div></div>`;
+    if(x.kind==='restricted')return `<div class="row" data-i="${i}"><div class="ic restricted">⚠</div><div><div class="nm">${esc(e.chem)}</div><div class="sub">วัตถุที่อาจใช้ ลำดับ ${esc(e.no)} · ${esc(e.inci)} ${e.cas.length?'· CAS '+esc(e.cas.join(', ')):''}</div>
+      <table class="uses">${e.uses.map(u=>`<tr><td>${esc(u.area)}</td><td>${esc(u.max)}</td><td>${esc(u.cond)}</td></tr>`).join('')}</table></div><div class="meta">หน้า ${e.page}</div></div>`;
+    return `<div class="row" data-i="${i}"><div class="ic word">!</div><div><div class="nm">${esc(e.word)}</div><div class="sub">คำห้ามใช้ ลำดับ ${e.no}</div></div><div class="meta">หน้า ${e.page}</div></div>`}).join('')
+    :'<div class="empty">ไม่พบ</div>';
+  $$('#res3 .row').forEach(el=>el.onclick=()=>{const x=r[+el.dataset.i],e=x.entry;openReg(e.file,e.page,e.rect,e.no)})}
+async function refreshInfo(){const i=await api.info();$('#ver').textContent='โปรแกรม v'+i.version;$('#dbv').textContent='ฐานข้อมูล '+i.db_version;
+  $('#srcInfo').innerHTML=`<div>วัตถุห้ามใช้ <b>${i.counts.banned}</b> รายการ · วัตถุที่อาจใช้ <b>${i.counts.restricted}</b> รายการ · คำห้ามใช้ <b>${i.counts.words}</b> คำ</div>`+
+    Object.values(i.sources).map(s=>`<div class="mini">• ${esc(s)}</div>`).join('')+`<div class="mini" style="margin-top:6px">ชื่อสารสากล: CosIng (European Commission) — ค้นออนไลน์ เก็บผลไว้ในเครื่อง 30 วัน</div><div class="mini">ฐานข้อมูลเวอร์ชัน ${esc(i.db_version)}</div>`}
+async function checkUpd(){$('#updInfo').textContent='กำลังตรวจสอบเวอร์ชัน…';const u=await api.check_update();
+  if(!u.ok){$('#updInfo').textContent='ตรวจสอบอัปเดตไม่ได้ ('+u.error+')';return}
+  S.online=true;setNet();const L=u.latest;
+  $('#updInfo').innerHTML=`ล่าสุด: โปรแกรม v${esc(L.app)} · ฐานข้อมูล ${esc(L.db)}${L.notes?'<br>'+esc(L.notes):''}`;
+  $('#btnUpdDb').disabled=!u.db_new;$('#btnUpdDb').textContent=u.db_new?'อัปเดตฐานข้อมูล ('+L.db+')':'ฐานข้อมูลเป็นเวอร์ชันล่าสุด';
+  $('#btnUpdApp').disabled=!(u.app_new&&u.frozen);$('#btnUpdApp').textContent=u.app_new?'อัปเดตโปรแกรมเป็น v'+L.app:'โปรแกรมเป็นเวอร์ชันล่าสุด';
+  if(u.app_new||u.db_new)toast('มีอัปเดตใหม่ — ดูที่แท็บ “ฐานข้อมูล / อัปเดต”')}
+$('#btnRecheck').onclick=checkUpd;
+$('#btnUpdDb').onclick=async()=>{$('#btnUpdDb').disabled=true;const r=await api.do_update('db');if(r.ok){toast('อัปเดตฐานข้อมูลแล้ว');refreshInfo();checkUpd()}else toast(r.error,true)};
+$('#btnUpdApp').onclick=async()=>{$('#btnUpdApp').disabled=true;toast('กำลังดาวน์โหลดโปรแกรมใหม่ — โปรแกรมจะปิดแล้วเปิดใหม่เอง');const r=await api.do_update('app');if(!r.ok)toast(r.error,true)};
+function setNet(){const d=$('#netDot');d.className='dot '+(S.online?'on':S.online===false?'off':'');$('#netTxt').textContent=S.online?'ออนไลน์':S.online===false?'ออฟไลน์':'กำลังเชื่อมต่อ…'}
+
+/* ---------------- export ---------------- */
+$('#btnExp1').onclick=async()=>{const r=S.cmp;const rows=r.results.map(x=>({status:ST[x.status][1],formula_no:x.formula?x.formula.idx+1:'',inci:x.formula?x.formula.inci:'',jp:x.formula?x.formula.jp:'',
+  pct:x.formula&&x.formula.pct!=null?x.formula.pct:'',label:x.label_text,label_no:x.l!=null?x.l+1:'',score:Math.round(x.score),note:x.order_warn||x.suggest||''}));
+  const res=await api.export_report('cmp',rows,V.label.view.name+' vs '+V.formula.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
+$('#btnExp2').onclick=async()=>{const r=S.reg;const rows=r.items.map(it=>({level:LV[it.level][1],name:it.name,jp:it.jp,cas:it.cas.join(', '),pct:it.pct??'',
+  hits:it.hits.map(h=>(h.kind==='banned'?'ห้ามใช้ ลำดับ ':'อาจใช้ ลำดับ ')+h.entry.no+' (หน้า '+h.entry.page+')').join('; '),
+  limit:it.hits.filter(h=>h.kind==='restricted').flatMap(h=>h.entry.uses.map(u=>u.area+': '+u.max)).join(' | '),
+  cosing:it._cos?(it._cos.status==='exact'?'ตรง':it._cos.status==='error'?'':'ไม่ตรง: '+(it._cos.suggestions||[]).slice(0,2).map(s=>s.inci).join(', ')):'',
+  guide:it.guide.map(g=>'หน้า '+g.page).join(', ')}));
+  const words=r.words.map(w=>({word:w.word.word,found:w.found,line:w.line,no:w.word.no}));
+  const res=await api.export_report('reg',{rows,words},V.reg.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
+
+/* ---------------- start ---------------- */
+window.addEventListener('pywebviewready',async()=>{api=window.pywebview.api;refreshInfo();checkUpd();
+  setTimeout(()=>{if(S.online==null){api.cosing('GLYCERIN').then(c=>{S.online=c.status!=='error';setNet()})}},1500)});
+</script>
+</body>
+</html>
