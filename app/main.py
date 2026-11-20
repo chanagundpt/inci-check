@@ -40,9 +40,14 @@ class Api:
 
     # ------------------------------------------------ files
     def pick_file(self):
-        types = ("ไฟล์ที่รองรับ (*.pdf;*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.webp;*.xlsx;*.xlsm;*.csv)",
-                 "ทุกไฟล์ (*.*)")
-        r = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=types)
+        # pywebview รับชื่อตัวกรองเฉพาะตัวอักษรอังกฤษ (ภาษาไทยทำให้หน้าต่างไม่เปิด)
+        types = ("Supported files (*.pdf;*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.webp;*.xlsx;*.xlsm;*.csv)",
+                 "All files (*.*)")
+        try:
+            r = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=types)
+        except Exception:
+            traceback.print_exc()
+            r = self._window.create_file_dialog(webview.FileDialog.OPEN)
         return r[0] if r else None
 
     def load_bytes(self, slot, name, b64, opts=None):
@@ -185,7 +190,7 @@ class Api:
                       data["words"])
         name = re.sub(r'[\\/:*?"<>|]', "_", "ผลตรวจ " + os.path.splitext(title)[0])[:120] + ".xlsx"
         r = self._window.create_file_dialog(webview.FileDialog.SAVE, save_filename=name,
-                                            file_types=("Excel (*.xlsx)",))
+                                            file_types=("Excel files (*.xlsx)",))
         if not r:
             return {"ok": False}
         p = r if isinstance(r, str) else r[0]

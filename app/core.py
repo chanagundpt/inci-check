@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS

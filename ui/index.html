@@ -314,7 +314,7 @@ async function loadFile(slot,path,b64name,b64){
   updCmpBtn();
   if((slot==='label'||slot==='formula')&&S.label&&S.formula&&S.label.items.length&&S.formula.length)doCompare();
 }
-function pickFor(slot){return async()=>{const p=await api.pick_file();if(p)loadFile(slot,p)}}
+function pickFor(slot){return async()=>{try{const p=await api.pick_file();if(p)loadFile(slot,p)}catch(e){toast('เปิดหน้าต่างเลือกไฟล์ไม่ได้: '+(e&&e.message||e)+' — ลากไฟล์มาวางแทนได้',true)}}}
 [['label','#cLabel'],['formula','#cFormula'],['reg','#cReg']].forEach(([slot,sel])=>{
   const card=$(sel);$$('[data-pick]',card).forEach(b=>b.onclick=pickFor(slot));
   const vw=$('.vw',card);

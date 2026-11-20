@@ -1,8 +1,10 @@
 {
-  "app": "1.0.0",
-  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.0.0/2NK-INCI-Check.exe",
-  "db": "2026-11-20",
-  "db_url": "https://raw.githubusercontent.com/chanagundpt/inci-check/main/data/regdb.json",
-  "files": {},
-  "notes": "เวอร์ชันแรก: ตรวจฉลาก↔สูตร, สารห้ามใช้ อย., CosIng"
+    "app":  "1.0.1",
+    "app_url":  "https://github.com/chanagundpt/inci-check/releases/download/v1.0.1/2NK-INCI-Check.exe",
+    "db":  "2026-11-20",
+    "db_url":  "https://raw.githubusercontent.com/chanagundpt/inci-check/main/data/regdb.json",
+    "files":  {
+
+              },
+    "notes":  "v1.0.1: แก้ปุ่มเลือกไฟล์ไม่เปิดหน้าต่าง"
 }
