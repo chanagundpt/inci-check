@@ -108,6 +108,31 @@ class Api:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
 
+    def edit_label(self, idx, text):
+        """ผู้ใช้แก้ชื่อที่ OCR อ่านผิด (ใส่ , ถ้าเป็นหลายชื่อ) แล้วเทียบใหม่"""
+        try:
+            items = self._label["items"]
+            it = items[int(idx)]
+            parts = [p.strip() for p in re.split(r"[,、，;]", text) if p.strip()]
+            new = [dict(it, text=p, edited=True) for p in parts]
+            self._label["items"] = items[:int(idx)] + new + items[int(idx) + 1:]
+            return self.compare()
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
+    def save_html(self, name, html):
+        name = re.sub(r'[\\/:*?"<>|]', "_", name)[:120]
+        r = self._window.create_file_dialog(webview.FileDialog.SAVE, save_filename=name, file_types=("HTML files (*.html)",))
+        if not r:
+            return {"ok": False}
+        p = r if isinstance(r, str) else r[0]
+        if not p.lower().endswith((".html", ".htm")):
+            p += ".html"
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(html)
+        return {"ok": True, "path": p}
+
     # ------------------------------------------------ CosIng / web
     def cosing(self, name):
         return self._cosing.check(name)

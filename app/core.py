@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.0.2"
+VERSION = "1.1.0"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -18,6 +18,10 @@ os.makedirs(USER_DIR, exist_ok=True)
 CAS_RE = re.compile(r"\b\d{2,7}-\d{2}-\d\b")
 IMG_EXT = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".gif")
 DASHES = "‐‑‒–—―−ー－ｰ﹣"
+# ตัวอักษรที่ OCR สับสนบ่อย (ใช้เฉพาะตอนเปรียบเทียบ): คันจิ↔คาตาคานะหน้าตาเหมือนกัน, คานะตัวเล็ก↔ตัวใหญ่, ノ↔/
+OCR_SAME = str.maketrans({"八": "ハ", "力": "カ", "口": "ロ", "二": "ニ", "工": "エ", "一": "-", "卜": "ト", "夕": "タ",
+                          "ァ": "ア", "ィ": "イ", "ゥ": "ウ", "ェ": "エ", "ォ": "オ", "ャ": "ヤ", "ュ": "ユ", "ョ": "ヨ",
+                          "ッ": "ツ", "ヮ": "ワ", "ヵ": "カ", "ヶ": "ケ", "ノ": "/", "／": "/"})
 
 
 # ---------------------------------------------------------------- utils
@@ -30,6 +34,7 @@ def norm(s):
     s = s.upper()
     s = "".join(chr(ord(c) + 0x60) if "ぁ" <= c <= "ゖ" else c for c in s)  # ひらがな→カタカナ (OCR สับสน へ/ヘ)
     s = s.replace("Γ", "G").replace("γ".upper(), "G")
+    s = s.translate(OCR_SAME)
     s = re.sub(r"[\s　]+", "", s)
     s = s.strip(".:;,、。・ ")
     return s
@@ -72,7 +77,7 @@ class OCR:
             if lang not in cls._eng:
                 cls._eng[lang] = RapidOCR(params={
                     "Global.log_level": "error",
-                    "Rec.lang_type": LangRec.TH if lang == "th" else LangRec.CH,
+                    "Rec.lang_type": {"th": LangRec.TH, "en": LangRec.EN}.get(lang, LangRec.CH),
                     "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.MOBILE,
                     "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
                 })
@@ -80,7 +85,8 @@ class OCR:
 
     @classmethod
     def run(cls, img, lang):
-        r = cls.engine(lang)(img, return_word_box=True)
+        # ต้องระบุ use_* ทุกครั้ง: rapidocr จำค่าจากการเรียกครั้งก่อน
+        r = cls.engine(lang)(img, use_det=True, use_cls=False, use_rec=True, return_word_box=True)
         out = []
         if r.boxes is None:
             return out
@@ -88,10 +94,75 @@ class OCR:
         for box, txt, sc, ws in zip(r.boxes, r.txts, r.scores, words):
             xs = [p[0] for p in box]
             ys = [p[1] for p in box]
-            out.append({"text": txt, "score": float(sc), "box": [min(xs), min(ys), max(xs), max(ys)],
-                        "words": [(w[0], [min(p[0] for p in w[2]), min(p[1] for p in w[2]),
-                                          max(p[0] for p in w[2]), max(p[1] for p in w[2])]) for w in ws if w and w[0]]})
+            out.append({"text": txt, "score": float(sc), "box": [float(min(xs)), float(min(ys)), float(max(xs)), float(max(ys))],
+                        "words": [(w[0], [float(min(p[0] for p in w[2])), float(min(p[1] for p in w[2])),
+                                          float(max(p[0] for p in w[2])), float(max(p[1] for p in w[2]))]) for w in ws if w and w[0]]})
         return out
+
+    @classmethod
+    def detect(cls, img):
+        r = cls.engine("ch")(img, use_det=True, use_cls=False, use_rec=False)
+        return [] if r.boxes is None else [list(map(list, b)) for b in r.boxes]
+
+    @classmethod
+    def rec(cls, crop, lang):
+        r = cls.engine(lang)(crop, use_det=False, use_cls=False, use_rec=True)
+        if not r.txts:
+            return "", 0.0
+        return r.txts[0], float(r.scores[0])
+
+
+def _crop_quad(img, quad, pad=3):
+    """ตัดบรรทัดตามกรอบสี่เหลี่ยม (ปรับเอียงให้ตรง)"""
+    import cv2, numpy as np
+    q = np.array(quad, dtype=np.float32)
+    w = int(max(np.linalg.norm(q[0] - q[1]), np.linalg.norm(q[2] - q[3]))) + 2 * pad
+    h = int(max(np.linalg.norm(q[0] - q[3]), np.linalg.norm(q[1] - q[2]))) + 2 * pad
+    if w < 4 or h < 4:
+        return None
+    dst = np.array([[pad, pad], [w - pad, pad], [w - pad, h - pad], [pad, h - pad]], dtype=np.float32)
+    m = cv2.getPerspectiveTransform(q, dst)
+    return cv2.warpPerspective(img, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+
+def _variants(c):
+    """ภาพบรรทัดหลายแบบ: เพิ่มความคมชัด / ขยาย / ช่องสีเขียว (พื้นแดง) — ช่วยฉลากถ่ายจากของจริง"""
+    import cv2
+    g = cv2.cvtColor(c, cv2.COLOR_RGB2GRAY)
+    up = lambda x: cv2.resize(x, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    gray3 = lambda x: cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)
+    yield up(c)
+    yield up(gray3(cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4)).apply(g)))
+    yield up(gray3(cv2.normalize(g, None, 0, 255, cv2.NORM_MINMAX)))
+    yield up(gray3(c[:, :, 1].copy()))
+
+
+def _read_line(crop, allow_th):
+    """อ่านบรรทัดเดียวด้วยหลายโมเดล/หลายภาพ เลือกผลที่มั่นใจที่สุด"""
+    best = (*OCR.rec(crop, "ch"), "ch")
+    if has_cjk(best[0]) and best[1] >= 0.9:
+        return best
+    cands = [best]
+    for lg in ([] if has_cjk(best[0]) else ["en"] + (["th"] if allow_th else [])):
+        t, s = OCR.rec(crop, lg)
+        if lg == "th" and not has_thai(t):
+            continue
+        cands.append((t, s, lg))
+    top = max(cands, key=lambda c: c[1])
+    if top[1] < 0.96:
+        for v in _variants(crop):
+            for lg in {top[2], "en"} if not has_cjk(top[0]) and top[2] != "th" else {top[2]}:
+                t, s = OCR.rec(v, lg)
+                if lg == "th" and not has_thai(t):
+                    continue
+                cands.append((t, s, lg))
+        top = max(cands, key=lambda c: c[1])
+    # ภาษาอังกฤษ: โมเดล en มีช่องว่างระหว่างคำ ใช้ถ้าคะแนนใกล้เคียง
+    if top[2] == "ch" and not has_cjk(top[0]):
+        en = max((c for c in cands if c[2] == "en"), key=lambda c: c[1], default=None)
+        if en and en[1] >= top[1] - 0.04:
+            top = en
+    return top
 
 
 def iou(a, b):
@@ -123,27 +194,31 @@ def _regions(boxes, gap):
 
 def ocr_page(page, lang="auto", progress=None):
     """OCR 2 รอบ: รอบแรกหาบริเวณข้อความ รอบสองซูมอ่านบริเวณที่ตัวอักษรเล็ก"""
+    import numpy as np
     w, h = page.rect.width, page.rect.height
-    dpi1 = max(120, min(300, int(3000 / (max(w, h) / 72))))
-    first = _ocr_clip(page, None, dpi1, lang, progress)
+    dpi1 = max(72, min(300, int(3000 / (max(w, h) / 72))))
+    # รอบแรก: หาเฉพาะตำแหน่งบรรทัด (ยังไม่อ่าน) เพื่อรู้ขนาดตัวอักษรแต่ละบริเวณ
+    pix = page.get_pixmap(dpi=dpi1, alpha=False)
+    img = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)[:, :, :3].copy()
+    s1 = 72.0 / dpi1
+    first = []
+    for q in OCR.detect(img):
+        xs, ys = [p[0] * s1 for p in q], [p[1] * s1 for p in q]
+        first.append([min(xs), min(ys), max(xs), max(ys)])
     if not first:
-        return first
-    hts = sorted(l["box"][3] - l["box"][1] for l in first)
+        return []
+    hts = sorted(b[3] - b[1] for b in first)
     gap = max(4.0, hts[len(hts) // 2] * 1.5)
-    regs = _regions([l["box"] for l in first], gap)
+    regs = _regions(first, gap)
     out = []
     for ri, rg in enumerate(regs):
-        inside = [l for l in first if l["box"][0] >= rg[0] - 0.5 and l["box"][2] <= rg[2] + 0.5
-                  and l["box"][1] >= rg[1] - 0.5 and l["box"][3] <= rg[3] + 0.5]
-        lh = sorted(l["box"][3] - l["box"][1] for l in inside)[len(inside) // 2] if inside else 10
+        inside = [b for b in first if b[0] >= rg[0] - 0.5 and b[2] <= rg[2] + 0.5 and b[1] >= rg[1] - 0.5 and b[3] <= rg[3] + 0.5]
+        lh = sorted(b[3] - b[1] for b in inside)[len(inside) // 2] if inside else 10
         target = min(1000, int(42 * 72 / max(lh, 0.5)))
         rw, rh = rg[2] - rg[0] + 8, rg[3] - rg[1] + 8
-        target = min(target, int(4200 * 72 / max(rw, rh)))
-        if target <= dpi1 * 1.3 or len("".join(l["text"] for l in inside)) < 6:
-            out += inside
-            continue
+        target = max(dpi1, min(target, int(4200 * 72 / max(rw, rh))))
         if progress:
-            progress("ซูมอ่านบริเวณข้อความ %d/%d…" % (ri + 1, len(regs)))
+            progress("อ่านข้อความบริเวณ %d/%d…" % (ri + 1, len(regs)))
         clip = pymupdf.Rect(rg[0] - 4, rg[1] - 4, rg[2] + 4, rg[3] + 4) & page.rect
         out += _ocr_clip(page, clip, target, lang, progress)
     out.sort(key=lambda l: (round(l["box"][1] / 4), l["box"][0]))
@@ -156,39 +231,42 @@ def _ocr_clip(page, clip, dpi, lang, progress):
     img = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)[:, :, :3].copy()
     sc = 72.0 / dpi
     ox, oy = (clip.x0, clip.y0) if clip is not None else (0, 0)
-    langs = ["th"] if lang == "th" else ["ch"]
-    res = OCR.run(img, langs[0])
-    if lang == "auto" and res and not any(has_cjk(r["text"]) for r in res):
-        if progress:
-            progress("อ่านซ้ำด้วยโมเดลภาษาไทย…")
-        th = OCR.run(img, "th")
-        merged = []
-        for t in th:
-            best = max(res, key=lambda r: iou(r["box"], t["box"]), default=None)
-            if best is not None and iou(best["box"], t["box"]) > 0.5:
-                if best["score"] >= t["score"] and not has_thai(t["text"]):
-                    continue
-            merged.append(t)
-        for r in res:
-            if not any(iou(r["box"], t["box"]) > 0.5 for t in merged):
-                merged.append(r)
-        res = merged
-    lines = []
     tr = lambda b: [b[0] * sc + ox, b[1] * sc + oy, b[2] * sc + ox, b[3] * sc + oy]
-    for r in res:
-        box = tr(r["box"])
+    lines = []
+    full = OCR.run(img, "th" if lang == "th" else "ch")   # อ่านทั้งบริเวณ (มีตำแหน่งรายตัวอักษร)
+    for q in OCR.detect(img):
+        xs, ys = [float(p[0]) for p in q], [float(p[1]) for p in q]   # float ปกติ (numpy ส่งเป็น JSON ไม่ได้)
+        qb = [min(xs), min(ys), max(xs), max(ys)]
+        f = max(full, key=lambda r: iou(r["box"], qb), default=None)
+        if f is not None and iou(f["box"], qb) < 0.5:
+            f = None
+        if f and f["score"] >= 0.92 and (has_cjk(f["text"]) or lang == "th"):
+            t, s, words = f["text"], f["score"], f["words"]       # ภาษาญี่ปุ่น/จีนที่มั่นใจแล้ว ใช้ผลเดิม
+        else:
+            crop = _crop_quad(img, q)
+            if crop is None:
+                continue
+            t, s, _ = _read_line(crop, allow_th=(lang == "auto"))
+            words = []
+            if f and f["score"] > s:
+                t, s, words = f["text"], f["score"], f["words"]
+        t = t.strip()
+        if not t or s < 0.3:
+            continue
+        box = tr(qb)
         chars = []
-        for wtxt, wb in (r["words"] or [(r["text"], r["box"])]):
-            wb = tr(wb)
-            n = max(1, len(wtxt))
-            for i, ch in enumerate(wtxt):
-                chars.append((ch, [wb[0] + (wb[2] - wb[0]) * i / n, wb[1], wb[0] + (wb[2] - wb[0]) * (i + 1) / n, wb[3]]))
-        txt = "".join(c for c, _ in chars) or r["text"]
-        if not chars:
-            n = max(1, len(txt))
+        if words and "".join(w for w, _ in words) == t.replace(" ", ""):
+            for wtxt, wb in words:
+                wb = tr(wb)
+                n = max(1, len(wtxt))
+                chars += [(ch, [wb[0] + (wb[2] - wb[0]) * i / n, wb[1], wb[0] + (wb[2] - wb[0]) * (i + 1) / n, wb[3]])
+                          for i, ch in enumerate(wtxt)]
+            t = "".join(c for c, _ in chars)
+        else:
+            n = max(1, len(t))
             chars = [(ch, [box[0] + (box[2] - box[0]) * i / n, box[1], box[0] + (box[2] - box[0]) * (i + 1) / n, box[3]])
-                     for i, ch in enumerate(txt)]
-        lines.append({"text": txt, "box": box, "chars": chars, "score": r["score"]})
+                     for i, ch in enumerate(t)]
+        lines.append({"text": t, "box": box, "chars": chars, "score": float(s)})
     return lines
 
 
@@ -319,8 +397,8 @@ HDR = {
     "jp": r"Japanese|成分名|表示名|和名|日本",
     "th": r"ภาษาไทย|Thai",
     "cas": r"CAS",
-    "pct": r"%|％|wt|w/w|Conc|含有|配合量|ปริมาณ|ร้อยละ",
-    "func": r"Function|配合目的|機能|目的|หน้าที่",
+    "pct": r"%|％|wt|w/w|Conc|Percent|含有|配合量|ปริมาณ|ร้อยละ",
+    "func": r"Function|Usage|Purpose|配合目的|機能|目的|หน้าที่",
     "no": r"^No\.?$|^#$|ลำดับ|^番号",
 }
 
@@ -354,14 +432,20 @@ def extract_formula(doc):
     rows = []
     if doc.kind == "table":
         t = doc.table
-        for hi in range(min(15, len(t))):
-            m = _map_header([(v, i) for i, v in enumerate(t[hi])])
-            if "inci" in m or ("jp" in m and len(m) >= 2):
+        # หัวตาราง = แถวที่จับคู่หัวคอลัมน์ได้มากที่สุด (กันแถวชื่อเอกสาร เช่น "CERTIFICATE OF INGREDIENTS")
+        cand = [(len(m), hi, m) for hi in range(min(15, len(t)))
+                for m in [_map_header([(v, i) for i, v in enumerate(t[hi])])]
+                if ("inci" in m or "jp" in m) and len(m) >= 2]
+        for _, hi, m in sorted(cand, key=lambda c: (-c[0], c[1]))[:1]:
+            if True:
                 for ri in range(hi + 1, len(t)):
                     r = t[ri]
                     inci = r[m["inci"]].strip() if "inci" in m else ""
                     jp = r[m["jp"]].strip() if "jp" in m else ""
                     if not (inci or jp) or re.match(r"^(total|รวม|合計)", inci + jp, re.I):
+                        continue
+                    # แถวท้ายตาราง (ชื่อบริษัท/หมายเหตุ) ไม่มีทั้ง % และ CAS
+                    if "pct" in m and not str(r[m["pct"]]).strip() and not ("cas" in m and str(r[m["cas"]]).strip()):
                         continue
                     row = {"inci": inci, "jp": jp, "th": r[m["th"]].strip() if "th" in m else "",
                            "cas": CAS_RE.findall(r[m["cas"]]) if "cas" in m else [],
@@ -429,7 +513,8 @@ MARKERS = [
 ]
 STOP = re.compile(r"^\s*(【|■|●|◆|\[|※|＊|\*|\d\s*[\)）]|販売名|お客様|製造販売|発売元|内容量|MADE IN|Made in|"
                   r"วิธีใช้|คำเตือน|ผลิตโดย|นำเข้าโดย|จัดจำหน่าย|ผู้นำเข้า|ผู้ผลิต|ขนาดบรรจุ|ปริมาณสุทธิ|เลขที่|"
-                  r"How to use|Directions|Caution|Warning|Manufactur|Distribut|Net\s|Exp|Mfg|Lot)", re.I)
+                  r"How to use|Directions|Caution|Warning|Manufactur|Distribut|Net\s|Exp|Mfg|Lot|"
+                  r"\d+(?:\.\d+)?\s*(?:ml|g|oz|fl|กรัม|มล)\b)", re.I)
 SEP = "、,，;；"
 
 
@@ -504,7 +589,9 @@ def extract_label(doc):
             depth = max(0, depth - 1)
         if depth and pstart is not None and i - pstart > 45:
             depth = 0
-        if (ch in SEP and depth == 0) or i == len(text):
+        # ชื่อสารคั่นด้วย , เสมอ — OCR อาจอ่าน , เป็น . (". ตามด้วยตัวพิมพ์ใหญ่" = คั่น)
+        dot_sep = ch == "." and re.match(r"\s+[A-Z(]", text[i + 1:i + 3] or "") is not None
+        if ((ch in SEP or dot_sep) and depth == 0) or i == len(text):
             raw = text[start:i]
             a = start + (len(raw) - len(raw.lstrip()))
             nm = raw.strip().strip("。.")
@@ -559,27 +646,39 @@ def score_names(a_alts, b_alts):
 def _split_items(label, fa):
     """OCR อ่านเครื่องหมายคั่นไม่ติด → ลองแยกเป็น 2 ชื่อที่ตรงกับสูตร"""
     seq, out = label.get("seq"), []
-    for it in label["items"]:
+    queue = list(label["items"])
+    while queue:
+        it = queue.pop(0)
         t = it["text"]
         best1 = max((score_names({norm(t)}, f) for f in fa), default=0)
         best = None
-        if best1 < 92 and seq is not None and "a" in it and 4 <= len(t) <= 80:
+        if best1 < 92 and not it.get("edited") and seq is not None and "a" in it and 4 <= len(t) <= 160:
             for k in range(2, len(t) - 1):
                 l, r = t[:k].strip(), t[k:].strip()
                 if len(l) < 2 or len(r) < 2:
+                    continue
+                # ภาษาอังกฤษ/ไทยแยกได้เฉพาะตรงช่องว่าง (ไม่ตัดกลางคำ); ญี่ปุ่นไม่มีช่องว่างจึงแยกได้ทุกตำแหน่ง
+                if re.search(r"[A-Za-z฀-๿]", t) and not has_cjk(t) and t[k - 1] != " " and t[k] != " ":
                     continue
                 sl = max(score_names(alt_names(l), f) for f in fa)
                 if sl < 90:
                     continue
                 sr = max(score_names(alt_names(r), f) for f in fa)
-                m = min(sl, sr)
-                full = min(max(score_names({norm(l)}, f) for f in fa), max(score_names({norm(r)}, f) for f in fa))
-                if m >= 90 and m > best1 + 3 and (best is None or (m, full) > best[0]):
-                    best = ((m, full), k)
+                fl = max(score_names({norm(l)}, f) for f in fa)
+                fr = max(score_names({norm(r)}, f) for f in fa)
+                if min(sl, sr) >= 90 and min(sl, sr) > best1 + 3:
+                    key = (2, min(sl, sr), min(fl, fr))          # แยกแล้วตรงทั้งสองฝั่ง
+                elif fl >= 95 and len(r) >= 4:
+                    key = (1, fl, k)                              # ส่วนหน้าตรงชัด ส่วนหลังแยกต่อรอบถัดไป
+                else:
+                    continue
+                if best is None or key > best[0]:
+                    best = (key, k)
         if best:
             k, a = best[1], it["a"]
-            out.append(dict(it, text=t[:k].strip(), marks=char_marks(seq, a, a + k), split=True))
-            out.append(dict(it, text=t[k:].strip(), marks=char_marks(seq, a + k, it["b"]), split=True))
+            # ส่วนท้ายอาจรวมหลายชื่อ → ตรวจแยกซ้ำ (OCR ไม่เห็น , หลายจุด)
+            out.append(dict(it, text=t[:k].strip(), marks=char_marks(seq, a, a + k), split=True, b=a + k))
+            queue.insert(0, dict(it, text=t[k:].strip(), marks=char_marks(seq, a + k, it["b"]), split=True, a=a + k))
         else:
             out.append(it)
     for i, it in enumerate(out):
@@ -625,6 +724,9 @@ def compare(label, formula):
             sug = max(((score_names(la[i], fa[j]), j) for j in range(len(formula))), default=(0, None))
             results.append({"status": "extra", "score": sug[0], "f": None, "l": i, "label_text": it["text"],
                             "formula": None, "suggest": formula[sug[1]]["label"] if sug[1] is not None and sug[0] >= 50 else ""})
+    for r in results:
+        if r["l"] is not None and items[r["l"]].get("edited"):
+            r["edited"] = True
     # ลำดับบนฉลาก: สารที่ ≥1% ต้องเรียงจากมากไปน้อย
     order = sorted([r for r in results if r["l"] is not None and r["formula"] and r["formula"]["pct"] is not None
                     and r["formula"]["pct"] >= 1], key=lambda r: r["l"])

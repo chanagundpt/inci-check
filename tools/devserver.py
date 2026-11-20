@@ -40,8 +40,13 @@ class H(SimpleHTTPRequestHandler):
         args = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"[]")
         try:
             if fn == "pick_file":
-                res = os.environ.get("PICK_" + str(len(args)), None)
                 res = PICK.get("next")
+            elif fn == "save_html":   # ไม่มีหน้าต่างบันทึก → เขียนลงโฟลเดอร์ชั่วคราว
+                p = os.path.join(os.environ.get("TEMP", "."), "inci_report_test.html")
+                open(p, "w", encoding="utf-8").write(args[1])
+                res = {"ok": True, "path": p}
+            elif fn == "open_path":
+                res = None
             else:
                 res = getattr(API, fn)(*args)
         except Exception as e:

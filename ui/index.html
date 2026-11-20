@@ -58,6 +58,8 @@ main{min-height:0;position:relative}
 .box.warn{background:rgba(251,191,36,.28);outline:2px solid #FBBF24}
 .box.soft{background:rgba(56,189,248,.10);outline:1px solid rgba(56,189,248,.45)}
 .box.all{background:rgba(74,222,128,.10)}
+.box.prob{background:rgba(251,191,36,.12);outline:1.5px dashed #FBBF24}
+.sum .sp{flex:1}
 .drop{position:absolute;inset:14px;border:2px dashed var(--line2);border-radius:14px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;color:var(--muted);text-align:center;padding:20px}
 .drop .big{font-size:15px;color:var(--text)}
@@ -153,6 +155,7 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
       <div class="card">
         <div class="mid-actions"><button class="primary" id="btnCmp" disabled>ตรวจเทียบ</button>
           <span class="mini" id="cmpHint">เลือกไฟล์ฉลาก (ซ้าย) และไฟล์สูตร (ขวา)</span><div class="sp"></div>
+          <button class="ghost" id="btnRep1" disabled title="ไฟล์ .html ส่งให้คนอื่นเปิดดูได้ ชี้แล้วไฮไลต์เหมือนในโปรแกรม">📤 รายงานส่งต่อ</button>
           <button class="ghost" id="btnExp1" disabled title="บันทึกผลเป็น Excel">Excel</button></div>
         <div class="sum" id="sum1"></div>
         <div class="res" id="res1"><div class="empty">เลือกไฟล์ทั้งสองฝั่งแล้วกด “ตรวจเทียบ”<br>ชี้เมาส์ที่รายการเพื่อดูตำแหน่งบนฉลากและในสูตร</div></div>
@@ -180,6 +183,7 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
       <div class="card">
         <div class="mid-actions"><span class="mini" id="regHint">ยังไม่ได้เลือกไฟล์</span><div class="sp"></div>
           <button class="ghost" id="btnCos" disabled>ตรวจชื่อ CosIng ใหม่</button>
+          <button class="ghost" id="btnRep2" disabled title="ไฟล์ .html ส่งให้คนอื่นเปิดดูได้ ชี้แล้วไฮไลต์เหมือนในโปรแกรม">📤 รายงานส่งต่อ</button>
           <button class="ghost" id="btnExp2" disabled>Excel</button></div>
         <div class="sum" id="sum2"></div>
         <div class="res" id="res2"><div class="empty">เลือกไฟล์ทางซ้ายเพื่อเริ่มตรวจ<br>ชี้เมาส์ที่สารเพื่อไฮไลต์ตำแหน่งในไฟล์ · คลิกเพื่อดูรายละเอียดและหน้าประกาศ</div></div>
@@ -338,26 +342,38 @@ function updCmpBtn(){const ok=S.label&&S.formula;$('#btnCmp').disabled=!ok;
 const ST={ok:['✓','ตรงกัน','ok'],near:['≈','สะกดต่างเล็กน้อย','near'],check:['?','ควรตรวจ','warn'],missing:['✕','ไม่มีบนฉลาก','bad'],extra:['+','บนฉลากแต่ไม่มีในสูตร','warn']};
 $('#btnCmp').onclick=doCompare;
 async function doCompare(){const r=await api.compare();if(!r.ok){toast(r.error,true);return}
-  S.cmp=r;S.label.items=r.items;S.sel1=null;$('#btnExp1').disabled=false;
-  V.label.clear();V.formula.clear();renderCmp()}
-function renderCmp(){const r=S.cmp;if(!r)return;const s=r.summary;
-  const chips=[['all','ทั้งหมด',r.results.length,''],['ok','ตรงกัน',s.ok,'ok'],['near','สะกดต่าง',s.near+s.check,'near'],['missing','ไม่มีบนฉลาก',s.missing,'bad'],['extra','ไม่มีในสูตร',s.extra,'warn'],['order','ลำดับ',s.order,'info']];
-  $('#sum1').innerHTML=chips.map(([k,t,n,c])=>`<span class="chip ${c} ${S.f1===k?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
-  $$('#sum1 .chip').forEach(c=>c.onclick=()=>{S.f1=c.dataset.k;renderCmp()});
+  S.cmp=r;S.label.items=r.items;S.sel1=null;$('#btnExp1').disabled=false;$('#btnRep1').disabled=false;
+  V.label.clear();V.formula.clear();markProblems();renderCmp()}
+// รายการที่มีปัญหา ไฮไลต์ค้างไว้บนฉลาก (เส้นประสีเหลือง)
+function markProblems(){if(!S.cmp)return;
+  V.label.mark(S.cmp.results.filter(x=>x.l!=null&&x.status!=='ok').flatMap(x=>S.cmp.items[x.l].marks),'prob',false)}
+// เรียงตามลำดับบนฉลาก (ค่าเริ่มต้น) — ชื่อที่อ่าน/จับคู่ไม่ได้คงอยู่ในตำแหน่งเดิม, สารในสูตรที่ไม่พบบนฉลากอยู่ท้ายสุด
+function cmpOrder(list){const lab=list.filter(([x])=>x.l!=null).sort((a,b)=>a[0].l-b[0].l),rest=list.filter(([x])=>x.l==null).sort((a,b)=>a[0].f-b[0].f);
+  return [lab,rest]}
+function cmpRowHtml(x,i,sel){const st=ST[x.status],fr=x.formula;
+  const name=x.status==='extra'?x.label_text:(fr?(fr.inci||fr.jp||fr.th):x.label_text);
+  const sub=[];if(fr&&fr.jp&&fr.inci)sub.push(`<span class="jp">${esc(fr.jp)}</span>`);
+  if(x.status!=='ok'&&x.status!=='missing'&&x.status!=='extra'&&x.label_text)sub.push('บนฉลาก: <b>'+esc(x.label_text)+'</b>');
+  if(x.status==='extra'&&x.suggest)sub.push('ใกล้เคียงในสูตร: '+esc(x.suggest));
+  const tags=`<span class="tag ${st[2]}">${st[1]}${x.status==='near'||x.status==='check'?' '+Math.round(x.score)+'%':''}</span>`+(x.edited?'<span class="tag mut">แก้ข้อความแล้ว</span>':'')+(x.order_warn?'<span class="tag info">ลำดับ</span>':'');
+  const meta=(x.l!=null?'ฉลาก #'+(x.l+1):'')+(fr?(x.l!=null?'<br>':'')+'สูตร #'+(fr.idx+1):'')+(fr&&fr.pct!=null?'<br>'+fmtPct(fr.pct):'');
+  return `<div class="row ${sel?'sel':''}" data-i="${i}"><div class="ic ${x.status}">${x.l!=null&&S.sort1==='label'?x.l+1:st[0]}</div>
+    <div><div class="nm">${esc(name)}</div><div class="sub">${sub.join(' · ')}</div>${tags}</div><div class="meta">${meta}</div></div>`}
+function renderCmp(){const r=S.cmp;if(!r)return;const s=r.summary;S.sort1=S.sort1||'label';
+  const chips=[['all','ทั้งหมด',r.results.length,''],['ok','ตรงกัน',s.ok,'ok'],['near','สะกดต่าง',s.near+s.check,'near'],['missing','ไม่มีบนฉลาก',s.missing,'bad'],['extra','อ่านไม่ได้/ไม่มีในสูตร',s.extra,'warn'],['order','ลำดับ',s.order,'info']];
+  $('#sum1').innerHTML=chips.map(([k,t,n,c])=>`<span class="chip ${c} ${S.f1===k?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('')+
+    `<span class="sp"></span><span class="chip ${S.sort1==='label'?'on':''}" data-sort="label">เรียงตามฉลาก</span><span class="chip ${S.sort1==='prob'?'on':''}" data-sort="prob">ปัญหาก่อน</span>`;
+  $$('#sum1 .chip[data-k]').forEach(c=>c.onclick=()=>{S.f1=c.dataset.k;renderCmp()});
+  $$('#sum1 .chip[data-sort]').forEach(c=>c.onclick=()=>{S.sort1=c.dataset.sort;renderCmp()});
   const f=S.f1, list=r.results.map((x,i)=>[x,i]).filter(([x])=>f==='all'||(f==='near'?(x.status==='near'||x.status==='check'):f==='order'?!!x.order_warn:x.status===f));
-  // เรียง: ปัญหาก่อน แล้วตามลำดับในสูตร
-  const pr={missing:0,extra:1,check:2,near:3,ok:4};
-  list.sort((a,b)=>(pr[a[0].status]-pr[b[0].status])||((a[0].f??999)-(b[0].f??999)));
-  $('#res1').innerHTML=list.length?list.map(([x,i])=>{const st=ST[x.status],fr=x.formula;
-      const name=fr?(fr.inci||fr.jp||fr.th):x.label_text;
-      const sub=[];if(fr&&fr.jp&&fr.inci)sub.push(`<span class="jp">${esc(fr.jp)}</span>`);
-      if(x.status!=='ok'&&x.status!=='missing'&&x.label_text)sub.push('บนฉลาก: <b>'+esc(x.label_text)+'</b>');
-      if(x.status==='extra'&&x.suggest)sub.push('ใกล้เคียงในสูตร: '+esc(x.suggest));
-      const tags=`<span class="tag ${st[2]}">${st[1]}${x.status==='near'||x.status==='check'?' '+Math.round(x.score)+'%':''}</span>`+(x.order_warn?'<span class="tag info">ลำดับ</span>':'');
-      return `<div class="row ${S.sel1===i?'sel':''}" data-i="${i}"><div class="ic ${x.status}">${st[0]}</div>
-        <div><div class="nm">${esc(name)}</div><div class="sub">${sub.join(' · ')}</div>${tags}</div>
-        <div class="meta">${fr?'#'+(fr.idx+1):''}${fr&&fr.pct!=null?'<br>'+fmtPct(fr.pct):''}</div></div>`}).join('')
-    :'<div class="empty">ไม่มีรายการในกลุ่มนี้</div>';
+  let html='';
+  if(S.sort1==='label'){const [lab,rest]=cmpOrder(list);
+    if(lab.length)html+=`<div class="grp">ตามลำดับบนฉลาก (${lab.length})</div>`+lab.map(([x,i])=>cmpRowHtml(x,i,S.sel1===i)).join('');
+    if(rest.length)html+=`<div class="grp">มีในสูตร แต่ไม่พบบนฉลาก (${rest.length})</div>`+rest.map(([x,i])=>cmpRowHtml(x,i,S.sel1===i)).join('');
+  }else{const pr={missing:0,extra:1,check:2,near:3,ok:4};
+    list.sort((a,b)=>(pr[a[0].status]-pr[b[0].status])||((a[0].f??999)-(b[0].f??999)));
+    html=list.map(([x,i])=>cmpRowHtml(x,i,S.sel1===i)).join('')}
+  $('#res1').innerHTML=html||'<div class="empty">ไม่มีรายการในกลุ่มนี้</div>';
   $$('#res1 .row').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover1(i);el.onclick=()=>select1(i)});
   $('#res1').onmouseleave=()=>{if(S.sel1!=null)hover1(S.sel1,false);else{V.label.clear('hl');V.formula.clear('hl');V.label.clear('bad')}};
 }
@@ -377,10 +393,14 @@ function select1(i){S.sel1=i;$$('#res1 .row').forEach(e=>e.classList.toggle('sel
   h+=`<div>บนฉลาก</div><div>${x.label_text?esc(x.label_text)+(x.l!=null?` (ลำดับที่ ${x.l+1})`:''):'<span style="color:var(--bad)">ไม่พบบนฉลาก</span>'}</div></div>`;
   if(x.order_warn)h+=`<div class="tag info" style="display:block;margin:6px 0;padding:6px 8px">${esc(x.order_warn)}</div>`;
   if(x.status==='missing')h+=`<div class="sub">ไม่พบชื่อนี้ในรายการส่วนประกอบบนฉลาก — ถ้าเป็นสารติดมากับวัตถุดิบ (carry-over) อาจไม่ต้องแสดง แต่ควรตรวจสอบ</div>`;
-  if(lm.length)h+=`<div style="margin-top:8px"><a class="lk" id="zoomL">ซูมไปที่ตำแหน่งบนฉลาก</a></div>`;
+  if(x.status==='extra')h+=`<div class="sub">ชื่อนี้อ่านจากฉลากแล้วไม่ตรงกับสารใดในสูตร — อาจเป็นเพราะ OCR อ่านผิด หรือฉลากมีสารที่สูตรไม่มี ดูที่ภาพฉลากแล้วแก้ข้อความได้</div>`;
+  if(lm.length)h+=`<div style="margin-top:8px;display:flex;gap:14px"><a class="lk" id="zoomL">ซูมไปที่ตำแหน่งบนฉลาก</a>${x.l!=null?'<a class="lk" id="editL">✎ แก้ข้อความที่อ่านได้</a>':''}</div>`;
   const inci=fr&&fr.inci?fr.inci:(/[A-Za-z]{3}/.test(x.label_text)?x.label_text:'');
   if(inci)h+=`<div class="cos" id="cos1"><span class="mini">กำลังค้น CosIng…</span></div>`;
   d.innerHTML=h;const z=$('#zoomL');if(z)z.onclick=()=>V.label.focusMarks(lm);
+  const ed=$('#editL');if(ed)ed.onclick=async()=>{const t=prompt('แก้ชื่อสารตามที่เห็นบนฉลาก (ลำดับที่ '+(x.l+1)+')\nถ้าเป็น 2 ชื่อติดกัน คั่นด้วย ,',x.label_text);
+    if(t==null||!t.trim()||t.trim()===x.label_text)return;const r=await api.edit_label(x.l,t.trim());if(!r.ok){toast(r.error,true);return}
+    S.cmp=r;S.label.items=r.items;S.sel1=null;$('#det1').classList.remove('on');V.label.clear();V.formula.clear();markProblems();renderCmp();toast('แก้ข้อความแล้ว — ตรวจเทียบใหม่')};
   if(inci)cosLookup(inci).then(c=>{const el=$('#cos1');if(el&&S.sel1===i)el.innerHTML=cosHtml(c,inci)});
 }
 
@@ -402,7 +422,7 @@ function cosHtml(c,name){if(!c)return'';
 const LV={banned:['!','ห้ามใช้','bad'],restricted:['⚠','วัตถุที่อาจใช้ (มีเงื่อนไข)','warn'],guide:['i','มีในหลักเกณฑ์ อย.','info'],ok:['✓','ไม่พบในบัญชี','ok']};
 function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
   $('#regHint').textContent=(r.mode==='formula'?'อ่านจากตารางสูตร':'อ่านจากรายการส่วนประกอบบนฉลาก')+` · ${r.items.length} รายการ`;
-  $('#btnCos').disabled=false;$('#btnExp2').disabled=false;
+  $('#btnCos').disabled=false;$('#btnExp2').disabled=false;$('#btnRep2').disabled=false;
   if(r.error)toast(r.error,true);
   const cosBad=r.items.filter(it=>{const c=S.cos[(it.name||'').toUpperCase().trim()];return it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error'}).length;
   const chips=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['cos','ชื่อไม่ตรง CosIng',cosBad,'near'],['ok','ผ่าน',s.ok,'ok']];
@@ -521,6 +541,70 @@ $('#btnRecheck').onclick=checkUpd;
 $('#btnUpdDb').onclick=async()=>{$('#btnUpdDb').disabled=true;const r=await api.do_update('db');if(r.ok){toast('อัปเดตฐานข้อมูลแล้ว');refreshInfo();checkUpd()}else toast(r.error,true)};
 $('#btnUpdApp').onclick=async()=>{$('#btnUpdApp').disabled=true;toast('กำลังดาวน์โหลดโปรแกรมใหม่ — โปรแกรมจะปิดแล้วเปิดใหม่เอง');const r=await api.do_update('app');if(!r.ok)toast(r.error,true)};
 function setNet(){const d=$('#netDot');d.className='dot '+(S.online?'on':S.online===false?'off':'');$('#netTxt').textContent=S.online?'ออนไลน์':S.online===false?'ออฟไลน์':'กำลังเชื่อมต่อ…'}
+
+/* ---------------- shareable HTML report ---------------- */
+// ไฟล์ .html ไฟล์เดียว เปิดในเบราว์เซอร์ได้เลย: ภาพเอกสาร + รายการผล + ชี้แล้วไฮไลต์ เหมือนในโปรแกรม
+function cmpDetailHtml(x){const fr=x.formula,st=ST[x.status];let h=`<h4>${esc(fr?(fr.inci||fr.label):x.label_text)}</h4><span class="tag ${st[2]}">${st[1]}</span><div class="kv">`;
+  if(fr){h+=`<div>ลำดับในสูตร</div><div>${fr.idx+1}</div>`;if(fr.jp)h+=`<div>ชื่อญี่ปุ่น</div><div>${esc(fr.jp)}</div>`;if(fr.inci)h+=`<div>INCI</div><div>${esc(fr.inci)}</div>`;
+    if(fr.cas_text)h+=`<div>CAS</div><div>${esc(fr.cas_text)}</div>`;if(fr.func)h+=`<div>หน้าที่</div><div>${esc(fr.func)}</div>`;if(fr.pct!=null)h+=`<div>ปริมาณ</div><div>${fr.pct}%</div>`}
+  h+=`<div>บนฉลาก</div><div>${x.label_text?esc(x.label_text)+(x.l!=null?` (ลำดับที่ ${x.l+1})`:''):'<span style="color:var(--bad)">ไม่พบบนฉลาก</span>'}</div></div>`;
+  if(x.order_warn)h+=`<div class="sub">${esc(x.order_warn)}</div>`;return h}
+function regDetailHtml(it){let h=`<h4>${esc(it.name)}</h4><span class="tag ${LV[it.level][2]}">${LV[it.level][1]}</span><div class="kv">${it.cas.length?`<div>CAS</div><div>${esc(it.cas.join(', '))}</div>`:''}${it.pct!=null?`<div>ปริมาณ</div><div>${it.pct}%</div>`:''}</div>`;
+  it.hits.forEach(hh=>{const e=hh.entry;h+=hh.kind==='banned'?`<div class="hit banned"><span class="tag bad">วัตถุห้ามใช้ ลำดับ ${esc(e.no)}</span><div style="margin:6px 0">${esc(e.name)}</div><div class="mini">${esc(e.src)} · หน้า ${e.page}</div></div>`
+    :`<div class="hit restricted"><span class="tag warn">วัตถุที่อาจใช้ ลำดับ ${esc(e.no)}</span><div style="margin:6px 0">${esc(e.chem)}</div><table class="uses"><tr><th>บริเวณที่ใช้</th><th>สูงสุด</th><th>เงื่อนไข</th></tr>${e.uses.map(u=>`<tr><td>${esc(u.area)}</td><td>${esc(u.max)}</td><td>${esc(u.cond)}</td></tr>`).join('')}</table><div class="mini">${esc(e.src)} · หน้า ${e.page}</div></div>`});
+  it.guide.forEach(g=>{h+=`<div class="hit guide"><span class="tag info">หลักเกณฑ์ อย. หน้า ${g.page}</span><div style="margin:6px 0">${esc(g.line)}</div></div>`});
+  const c=it._cos;if(c&&c.status==='exact')h+=`<div class="cos"><span class="tag ok">ชื่อถูกต้องตาม CosIng</span> ${esc(c.best.inci)}</div>`;
+  else if(c&&c.status!=='error')h+=`<div class="cos"><span class="tag near">ชื่อไม่ตรงกับ CosIng</span> ใกล้เคียง: ${esc((c.suggestions||[]).slice(0,3).map(s=>s.inci).join(', '))}</div>`;
+  return h}
+const REPORT_JS=String.raw`
+const V={};document.querySelectorAll('[data-viewer]').forEach(c=>{V[c.dataset.viewer]=new Viewer(c,c.dataset.viewer);V[c.dataset.viewer].set(D.views[c.dataset.viewer])});
+window.addEventListener('resize',()=>Object.values(V).forEach(v=>{if(v.view&&v.view.kind!=='table')v.pg.forEach(p=>{const w=v.fitW()*v.zoom;p.el.style.width=w+'px';p.el.style.height=(w*p.h/p.w)+'px'})}));
+Object.entries(D.persist||{}).forEach(([k,[m,c]])=>V[k]&&V[k].mark(m,c,false));
+let sel=null;const hov=i=>{const r=D.rows[i];Object.entries(r.m).forEach(([k,[m,c]])=>V[k]&&V[k].mark(m,c,true))};
+document.querySelectorAll('#res .row').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hov(i);
+  el.onclick=()=>{sel=i;document.querySelectorAll('#res .row').forEach(e=>e.classList.toggle('sel',e===el));hov(i);const d=document.getElementById('det');d.classList.add('on');d.innerHTML=D.rows[i].d}});
+document.querySelectorAll('#sum .chip').forEach(c=>c.onclick=()=>{const k=c.dataset.k;document.querySelectorAll('#sum .chip').forEach(x=>x.classList.toggle('on',x===c));
+  document.querySelectorAll('#res .row').forEach(r=>r.style.display=(k==='all'||r.dataset.s.split(' ').includes(k))?'':'none')});
+Object.entries(D.rows.__fit||{}).forEach(([k,m])=>V[k]&&m.length&&V[k].fitBlock(m));`;
+function buildReport(kind){const css=document.querySelector('style').textContent;const now=new Date().toLocaleString('th-TH');
+  let title,cols,views,rows={},listHtml='',sumHtml='',persist={},sub;
+  if(kind==='cmp'){const r=S.cmp,s=r.summary;title='ผลตรวจฉลาก ↔ สูตร';views={label:V.label.view,formula:V.formula.view};sub=`ฉลาก: ${esc(V.label.view.name)} · สูตร: ${esc(V.formula.view.name)}`;
+    const all=r.results.map((x,i)=>[x,i]);const [lab,rest]=cmpOrder(all);const prev=S.sort1;S.sort1='label';
+    const row=([x,i])=>{const [lm,fm]=marks1(x);rows[i]={m:{label:[lm,x.status==='extra'?'warn':'hl'],formula:[fm,x.status==='missing'?'bad':'hl']},d:cmpDetailHtml(x)};
+      return cmpRowHtml(x,i,false).replace('<div class="row ',`<div data-s="${x.status==='check'?'near':x.status}${x.order_warn?' order':''}" class="row `)};
+    listHtml=(lab.length?`<div class="grp">ตามลำดับบนฉลาก (${lab.length})</div>`+lab.map(row).join(''):'')+(rest.length?`<div class="grp">มีในสูตร แต่ไม่พบบนฉลาก (${rest.length})</div>`+rest.map(row).join(''):'');S.sort1=prev;
+    persist.label=[r.results.filter(x=>x.l!=null&&x.status!=='ok').flatMap(x=>r.items[x.l].marks),'prob'];
+    if(V.label.view.kind!=='table')rows.__fit={label:r.items.flatMap(i=>i.marks)};
+    sumHtml=[['all','ทั้งหมด',r.results.length,''],['ok','ตรงกัน',s.ok,'ok'],['near','สะกดต่าง',s.near+s.check,'near'],['missing','ไม่มีบนฉลาก',s.missing,'bad'],['extra','อ่านไม่ได้/ไม่มีในสูตร',s.extra,'warn'],['order','ลำดับ',s.order,'info']]
+      .map(([k,t,n,c])=>`<span class="chip ${c} ${k==='all'?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
+    cols=`<div class="card" data-viewer="label">${vwHtml('ฉลาก',V.label.view)}</div><div class="card">${'<div class="sum" id="sum">'+sumHtml+'</div><div class="res" id="res">'+listHtml+'</div><div class="detail" id="det"></div>'}</div><div class="card" data-viewer="formula">${vwHtml('สูตร',V.formula.view)}</div>`;
+  }else{const r=S.reg,s=r.summary;title='ผลตรวจสารห้ามใช้ อย.';views={reg:V.reg.view};sub=`ไฟล์: ${esc(V.reg.view.name)}`;
+    const order=['banned','restricted','guide','ok'];
+    order.forEach(lv=>{const its=r.items.map((it,i)=>[it,i]).filter(([it])=>it.level===lv);if(!its.length)return;
+      listHtml+=`<div class="grp">${LV[lv][1]} (${its.length})</div>`+its.map(([it,i])=>{rows[i]={m:{reg:[it.marks,lv==='banned'?'bad':lv==='restricted'?'warn':'hl']},d:regDetailHtml(it)};
+        const tags=it.hits.map(hh=>hh.kind==='banned'?`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}</span>`:`<span class="tag warn">อาจใช้ ลำดับ ${hh.entry.no}</span>`).join('')+overTag(it)+(it.latin&&it._cos?cosTag(it):'');
+        return `<div class="row" data-s="${lv}" data-i="${i}"><div class="ic ${lv}">${LV[lv][0]}</div><div><div class="nm">${esc(it.name)}</div>${tags}</div><div class="meta">${it.cas.length?esc(it.cas[0]):''}${it.pct!=null?'<br>'+fmtPct(it.pct):''}</div></div>`}).join('')});
+    if(r.words.length)listHtml+=`<div class="grp">คำห้ามใช้บนฉลาก (${r.words.length})</div>`+r.words.map((w,k)=>{const i='w'+k;rows[i]={m:{reg:[w.marks,'warn']},d:`<h4>คำห้ามใช้: “${esc(w.word.word)}”</h4><div class="sub">${esc(w.line)}</div>`};
+      return `<div class="row" data-s="words" data-i="${i}"><div class="ic word">!</div><div><div class="nm">“${esc(w.found)}”</div><div class="sub">${esc(w.line)}</div></div><div class="meta">ลำดับ ${w.word.no}</div></div>`}).join('');
+    sumHtml=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['ok','ผ่าน',s.ok,'ok']]
+      .map(([k,t,n,c])=>`<span class="chip ${c} ${k==='all'?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
+    cols=`<div class="card" data-viewer="reg">${vwHtml('ไฟล์ที่ตรวจ',V.reg.view)}</div><div class="card"><div class="sum" id="sum">${sumHtml}</div><div class="res" id="res">${listHtml}</div><div class="detail" id="det"></div></div>`}
+  const data=JSON.stringify({views,rows,persist}).replace(/</g,'\\u003c');
+  const grid=kind==='cmp'?'minmax(0,1fr) 440px minmax(0,1fr)':'minmax(0,1fr) 520px';
+  return `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} — ${esc(kind==='cmp'?V.label.view.name:V.reg.view.name)}</title><style>${css}
+.rp{display:grid;grid-template-columns:${grid};gap:10px;padding:10px;height:calc(100vh - 64px)}header .meta2{color:var(--muted);font-size:12px;margin-left:12px}
+@media (max-width:900px){.rp{grid-template-columns:1fr;height:auto}.rp .card{height:70vh}}</style></head><body>
+<header style="height:54px"><div class="logo">2NK <b>INCI Check</b></div><div><div style="font-weight:600">${title}</div><div class="meta2" style="margin:0">${sub} · ${esc(now)}</div></div><div class="sp"></div><span class="mini">ชี้ที่รายการเพื่อดูตำแหน่ง · Ctrl+ลูกกลิ้ง = ซูม</span></header>
+<div class="rp">${cols}</div>
+<script>const D=${data};<\/script><script>const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+${Viewer.toString()}
+${REPORT_JS}<\/script></body></html>`}
+function vwHtml(t,view){return `<div class="hd"><span class="t">${t}</span><span class="f" data-f></span><div class="zoom"><button class="ghost" data-z="-">−</button><button class="ghost" data-z="fit">พอดี</button><button class="ghost" data-z="+">+</button></div></div><div class="vw"><div class="pages"></div><div class="busy"><div class="spin"></div><div data-msg></div></div></div>`}
+async function saveReport(kind){try{const html=buildReport(kind);const base=kind==='cmp'?V.label.view.name:V.reg.view.name;
+  const res=await api.save_html('รายงานผลตรวจ '+base.replace(/\.[^.]+$/,'')+'.html',html);
+  if(res.ok){toast('บันทึกรายงานแล้ว: '+res.path+' — ส่งไฟล์นี้ให้คนอื่นเปิดในเบราว์เซอร์ได้เลย');api.open_path(res.path)}}catch(e){toast('สร้างรายงานไม่ได้: '+e.message,true)}}
+
+$('#btnRep1').onclick=()=>saveReport('cmp');$('#btnRep2').onclick=()=>saveReport('reg');
 
 /* ---------------- export ---------------- */
 $('#btnExp1').onclick=async()=>{const r=S.cmp;const rows=r.results.map(x=>({status:ST[x.status][1],formula_no:x.formula?x.formula.idx+1:'',inci:x.formula?x.formula.inci:'',jp:x.formula?x.formula.jp:'',
