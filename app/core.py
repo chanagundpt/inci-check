@@ -1,11 +1,11 @@
-"""2NK INCI Check — แกนประมวลผล: อ่านไฟล์, OCR, ดึงรายชื่อสาร, จับคู่ฉลาก↔สูตร, ตรวจสารห้ามใช้"""
+﻿"""2NK INCI Check — แกนประมวลผล: อ่านไฟล์, OCR, ดึงรายชื่อสาร, จับคู่ฉลาก↔สูตร, ตรวจสารห้ามใช้"""
 import base64, csv, io, json, os, re, sys, threading, time, unicodedata
 
 import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -302,7 +302,7 @@ class Doc:
             if sum(len(l["text"]) for l in lines) < 15:
                 if progress:
                     progress("กำลังอ่านข้อความจากรูป (OCR) หน้า %d/%d…" % (pi + 1, len(self.pdf)))
-                lines = ocr_page(pg, ocr_lang, progress)
+                lines = ocr_page(pg, ocr_lang, progress)   # ชิ้นข้อความดิบ (ต่อเป็นบรรทัดตอนหารายการส่วนประกอบ)
                 for l in lines:
                     l["page"] = pi
                 self.ocr_pages.append(pi)
@@ -535,25 +535,8 @@ def _seq_from_lines(lines):
     return seq
 
 
-def extract_label(doc):
-    """หารายการส่วนประกอบบนฉลาก คืน {items, marker, text}"""
-    lines = [l for l in doc.lines if l.get("chars")]
-    if doc.kind == "table":
-        return _label_from_table(doc)
-    best = None
-    for li, l in enumerate(lines):
-        for pat, w in MARKERS:
-            m = re.search(pat, l["text"], re.I)
-            if m:
-                after = l["text"][m.end():]
-                seps = sum(after.count(c) for c in SEP)
-                score = w * 10 + seps + (5 if m.start() < 3 else 0)
-                if best is None or score > best[0]:
-                    best = (score, li, m.end())
-                break
-    if best is None:
-        return {"items": [], "marker": None, "error": "ไม่พบหัวข้อส่วนประกอบบนฉลาก (เช่น 全成分 / Ingredients / ส่วนประกอบ)"}
-    _, li0, cut = best
+def _collect_para(lines, li0, cut):
+    """บรรทัดของย่อหน้าส่วนประกอบ เริ่มหลังหัวข้อ ไปจนเว้นบรรทัด/หัวข้อใหม่"""
     l0 = lines[li0]
     page = l0.get("page")
     para = [dict(l0, chars=l0["chars"][cut:], text=l0["text"][cut:])]
@@ -564,6 +547,8 @@ def extract_label(doc):
     for l in lines[li0 + 1:]:
         if l.get("page") != page:
             break
+        if l.get("score", 1) < 0.85 and len(l["text"].strip()) < 12:
+            continue          # เศษข้อความที่อ่านไม่ชัด (เช่นใต้เทปใส/แสงสะท้อน) ไม่ใช้กำหนดตำแหน่งบรรทัด
         b, lb = l["box"], last["box"]
         if b[1] < lb[1] + lh * 0.3:
             continue          # คอลัมน์อื่นในแถวเดียวกัน
@@ -573,10 +558,129 @@ def extract_label(doc):
             continue          # คนละคอลัมน์
         if STOP.match(l["text"]):
             break
+        # ภาษาเปลี่ยน (รายการอังกฤษ/ญี่ปุ่น แล้วเจอบรรทัดภาษาไทย เช่นสติกเกอร์ผู้นำเข้าที่แปะใต้รายการ) = จบรายการ
+        txt_so_far = "".join(p["text"] for p in para)
+        # รายการจบด้วย "." แล้วบรรทัดถัดไปเป็นหัวเรื่องตัวพิมพ์ใหญ่ทั้งบรรทัด (เช่นชื่อสินค้าบนสติกเกอร์) = จบรายการ
+        letters = re.sub(r"[^A-Za-z]", "", l["text"])
+        if txt_so_far.rstrip().endswith(".") and len(letters) >= 8 and sum(c.isupper() for c in letters) >= 0.85 * len(letters):
+            break
+        if len(re.sub(r"\W", "", txt_so_far)) > 20 and not has_thai(txt_so_far) \
+                and len(re.findall(r"[฀-๿]", l["text"])) > 0.3 * max(1, len(re.sub(r"\W", "", l["text"]))):
+            break
         para.append(l)
         last = l
         if re.search(r"[。．]\s*$", l["text"]):
             break
+    return para
+
+
+def merge_fragments(lines):
+    """OCR บนขวด/กระปุกโค้ง มักแยก 1 บรรทัดเป็นหลายชิ้น → ต่อชิ้นที่อยู่แถวเดียวกันและอยู่ติดกัน"""
+    # ต่อเป็นสาย: แต่ละชิ้นเชื่อมกับชิ้นถัดไปทางขวาที่อยู่ระดับเดียวกันที่สุด (รองรับบรรทัดเอียง/โค้ง)
+    n = len(lines)
+    cy = [(l["box"][1] + l["box"][3]) / 2 for l in lines]
+    hh = [max(1e-3, l["box"][3] - l["box"][1]) for l in lines]
+    cand = []
+    for i, a in enumerate(lines):
+        for j, b in enumerate(lines):
+            if i == j:
+                continue
+            h = min(hh[i], hh[j])
+            gap = b["box"][0] - a["box"][2]
+            dy = abs(cy[j] - cy[i])
+            if has_cjk(a["text"]) or has_cjk(b["text"]):
+                continue      # ญี่ปุ่น/จีน OCR อ่านทั้งบรรทัดอยู่แล้ว (ต่อแล้วจะไปติดคอลัมน์ข้างๆ)
+            wmin = min(a["box"][2] - a["box"][0], b["box"][2] - b["box"][0])
+            if (max(-0.8 * h, -0.5 * wmin) <= gap <= 1.6 * h and b["box"][2] > a["box"][2]
+                    and dy < 0.55 * h and 0.6 < hh[i] / hh[j] < 1.65):
+                cand.append((dy + 0.25 * max(gap, 0), i, j))
+    nxt, prv = {}, {}
+    for _, i, j in sorted(cand):
+        if i not in nxt and j not in prv:
+            nxt[i], prv[j] = j, i
+    out = []
+    for s in range(n):
+        if s in prv:
+            continue
+        chain, k, seen = [lines[s]], s, {s}
+        while k in nxt and nxt[k] not in seen:
+            k = nxt[k]
+            seen.add(k)
+            chain.append(lines[k])
+        r = dict(chain[0])
+        for l in chain[1:]:
+            r["chars"] = r["chars"] + [(" ", None)] + l["chars"]
+            r["text"] = r["text"] + " " + l["text"]
+            r["score"] = min(r.get("score", 1), l.get("score", 1))
+        bs = [l["box"] for l in chain]
+        # กล่องรวม: ซ้าย/บนใช้ชิ้นแรก (กันบรรทัดเอียงกินพื้นที่บรรทัดอื่นตอนจัดย่อหน้า)
+        r["box"] = [bs[0][0], bs[0][1], max(b[2] for b in bs), max(b[3] for b in bs)]
+        r["box0"] = bs[0]
+        out.append(r)
+    out.sort(key=lambda l: (round(l["box"][1] / 4), l["box"][0]))
+    return out
+
+
+def extract_label(doc):
+    """หารายการส่วนประกอบบนฉลาก คืน {items, marker, text}"""
+    if doc.kind == "table":
+        return _label_from_table(doc)
+    raw = [l for l in doc.lines if l.get("chars")]
+    ocr = doc.source == "ocr"
+    lines = merge_fragments(raw) if ocr else raw
+    # หัวข้อที่ตามด้วยรายชื่อสารมากที่สุด = รายการส่วนประกอบจริง
+    # (กันสติกเกอร์ไทย "ส่วนประกอบ: ระบุบนบรรจุภัณฑ์" ที่ชี้ไปหารายการภาษาอังกฤษ)
+    best = None
+    for li, l in enumerate(lines):
+        for pat, w in MARKERS:
+            m = re.search(pat, l["text"], re.I)
+            if m:
+                after = l["text"][m.end():].strip(" :：")
+                if re.match(r"(ดู|ระบุ|แสดง|ตาม)", after) or re.search(r"(บน|ที่)(บรรจุภัณฑ์|กล่อง|ฉลาก|ขวด)", after):
+                    break
+                lns, li2, cut = lines, li, m.end()
+                if ocr:
+                    # ต่อชิ้นข้อความใหม่เฉพาะในคอลัมน์ของหัวข้อ (กันข้อความด้านข้างขวด/กระปุกโค้งมาปน)
+                    mb = next((b for c, b in l["chars"][m.start():] if b), l["box"])
+                    # ขอบซ้ายของคอลัมน์ = ขอบซ้ายของชิ้นข้อความหัวข้อ (เช่น "MAIN INGREDIENTS")
+                    cxm, cym = (mb[0] + mb[2]) / 2, (mb[1] + mb[3]) / 2
+                    hf = next((f for f in raw if f.get("page") == l.get("page") and f["box"][0] <= cxm <= f["box"][2]
+                               and f["box"][1] <= cym <= f["box"][3]), None)
+                    if hf:
+                        # หัวข้ออาจถูกแยกเป็นหลายชิ้น ("MAIN" + "INGREDIENTS") → ไล่ไปทางซ้ายเฉพาะชิ้นที่ติดกัน
+                        hb = hf["box"]
+                        while True:
+                            hh_ = hb[3] - hb[1]
+                            left = [f for f in raw if f.get("page") == l.get("page") and f["box"][2] <= hb[0] + 0.5 * hh_
+                                    and hb[0] - f["box"][2] <= 0.6 * hh_ and f["box"][0] < hb[0]
+                                    and abs((f["box"][1] + f["box"][3]) / 2 - (hb[1] + hb[3]) / 2) < 0.5 * hh_]
+                            if not left:
+                                break
+                            hb = max(left, key=lambda f: f["box"][2])["box"]
+                        mb = [hb[0], mb[1], mb[2], mb[3]]
+                    h = mb[3] - mb[1]
+                    col = [f for f in raw if f.get("page") == l.get("page") and f["box"][0] >= mb[0] - 0.8 * h
+                           and f["box"][3] > mb[1]]
+                    lns = merge_fragments(col)
+                    found = None
+                    for k, x in enumerate(lns):
+                        mm = re.search(pat, x["text"], re.I)
+                        if mm and abs(x["box"][1] - mb[1]) < 2 * h:
+                            found = (k, mm.end())
+                            break
+                    if not found:
+                        break
+                    li2, cut = found
+                para = _collect_para(lns, li2, cut)
+                txt = "".join(c for c, *_ in _seq_from_lines(para))
+                n = sum(txt.count(c) for c in SEP) + len(re.findall(r"\.\s+[A-Z]", txt))
+                score = n * 3 + w * 4 + (2 if m.start() < 3 else 0)
+                if best is None or score > best[0]:
+                    best = (score, m.group(0).strip(), para)
+                break
+    if best is None:
+        return {"items": [], "marker": None, "error": "ไม่พบหัวข้อส่วนประกอบบนฉลาก (เช่น 全成分 / Ingredients / ส่วนประกอบ)"}
+    _, marker, para = best
     seq = _seq_from_lines(para)
     text = "".join(c for c, *_ in seq)
     items, depth, start = [], 0, 0
@@ -600,7 +704,7 @@ def extract_label(doc):
                 b = a + len(raw.strip())
                 items.append({"text": nm, "marks": char_marks(seq, a, b), "pos": len(items), "a": a, "b": b})
             start = i + 1
-    return {"items": items, "marker": l0["text"][:cut].strip(), "text": text, "seq": seq}
+    return {"items": items, "marker": marker, "text": text, "seq": seq}
 
 
 def _label_from_table(doc):

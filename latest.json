@@ -1,8 +1,8 @@
 {
-  "app": "1.1.0",
-  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.1.0/2NK-INCI-Check.exe",
+  "app": "1.1.1",
+  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.1.1/2NK-INCI-Check.exe",
   "db": "2026-11-20",
   "db_url": "https://raw.githubusercontent.com/chanagundpt/inci-check/main/data/regdb.json",
   "files": {},
-  "notes": "v1.1.0: อ่านฉลากแม่นขึ้นมาก, เรียงผลตามลำดับบนฉลาก, แก้ข้อความที่อ่านผิดได้, รายงาน HTML ส่งต่อได้"
+  "notes": "v1.1.1: อ่านฉลากกระปุก/ขวดโค้งได้แม่นขึ้น, ไม่หลงสติกเกอร์ภาษาไทย"
 }
