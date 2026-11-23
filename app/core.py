@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -393,7 +393,7 @@ def char_marks(seq, a, b):
 
 # ---------------------------------------------------------------- formula
 HDR = {
-    "inci": r"INCI|Ingredient\s*name|Ingredients?(?!.*Japan)|ชื่อสาร|Component",
+    "inci": r"INCI|Ingredient\s*name|Ingredients?(?!.*Japan)|ชื่อสาร|Component|Chemical\s*Name|Raw\s*Material|Substance",
     "jp": r"Japanese|成分名|表示名|和名|日本",
     "th": r"ภาษาไทย|Thai",
     "cas": r"CAS",
@@ -425,6 +425,88 @@ def _clean_pct(s):
     s = re.sub(r"\s+", "", s or "").replace("％", "%")
     m = re.search(r"\d+(?:\.\d+)?", s)
     return float(m.group()) if m else None
+
+
+def respace(s):
+    """OCR มักทิ้งช่องว่างในชื่ออังกฤษ: "PropyleneGlycol" → "Propylene Glycol", "Peg-20Stearate" → "Peg-20 Stearate" """
+    s = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s)
+    s = re.sub(r"(?<=[0-9)])(?=[A-Z][a-z])", " ", s)
+    s = re.sub(r"(?<=[A-Za-z])\(", " (", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+WATERMARK = re.compile(r"^[A-Z]{1,4}\W*$")   # ลายน้ำ/เศษตัวอักษร เช่น TRT, TR, Q
+
+
+def _ocr_formula(doc):
+    """ตารางสูตร/MSDS จากหน้าที่เป็นรูป (OCR): หาแถวหัวตาราง (Chemical Name / % / CAS) แล้วแบ่งคอลัมน์ตามตำแหน่งหัวตาราง"""
+    out = []
+    for pi in doc.ocr_pages:
+        frags = [l for l in doc.lines if l.get("page") == pi and l.get("box") and l["text"].strip()]
+        if not frags:
+            continue
+        hs = sorted(l["box"][3] - l["box"][1] for l in frags)
+        h = hs[len(hs) // 2] or 10
+        # จัดเป็นแถวตามกึ่งกลางแนวตั้ง
+        rows = []
+        for l in sorted(frags, key=lambda l: (l["box"][1] + l["box"][3]) / 2):
+            cy = (l["box"][1] + l["box"][3]) / 2
+            if rows and abs(cy - rows[-1]["cy"]) <= h * 0.55:
+                rows[-1]["f"].append(l)
+                rows[-1]["cy"] = sum((x["box"][1] + x["box"][3]) / 2 for x in rows[-1]["f"]) / len(rows[-1]["f"])
+            else:
+                rows.append({"cy": cy, "f": [l]})
+        ri = 0
+        while ri < len(rows):
+            hdr = sorted(rows[ri]["f"], key=lambda l: l["box"][0])
+            m = _map_header([(l["text"], i) for i, l in enumerate(hdr)])
+            if "inci" not in m or not ("pct" in m or "cas" in m):
+                ri += 1
+                continue
+            cols = sorted(((k, (hdr[i]["box"][0] + hdr[i]["box"][2]) / 2, hdr[i]["box"]) for k, i in m.items()), key=lambda c: c[1])
+            bounds = []
+            for j, (k, cx, bx) in enumerate(cols):
+                lo = (cols[j - 1][1] + cx) / 2 if j else bx[0] - (bx[2] - bx[0]) * 2.5
+                hi = (cx + cols[j + 1][1]) / 2 if j + 1 < len(cols) else bx[2] + (bx[2] - bx[0]) * 0.8
+                bounds.append((k, lo, hi))
+            last_y, pitch, empty = rows[ri]["cy"], None, 0
+            for rj in range(ri + 1, len(rows)):
+                r = rows[rj]
+                if pitch and r["cy"] - last_y > pitch * 3.5:
+                    break
+                cell = {}
+                for l in r["f"]:
+                    t = l["text"].strip()
+                    cx = (l["box"][0] + l["box"][2]) / 2
+                    k = next((k for k, lo, hi in bounds if lo <= cx < hi), None)
+                    if not k or WATERMARK.match(t):
+                        continue
+                    if k == "cas" and not (CAS_RE.search(t) or re.match(r"^(mix|-|/|n/?a)", t, re.I)):
+                        continue
+                    if k == "pct" and not re.search(r"\d", t):
+                        continue
+                    if k == "inci" and (len(re.sub(r"[^A-Za-z]", "", t)) < 3 or re.match(r"^section\b", t, re.I)):
+                        continue
+                    cell.setdefault(k, []).append(l)
+                if "inci" not in cell:
+                    empty += 1
+                    if empty >= 2 or re.search(r"section", " ".join(l["text"] for l in r["f"]), re.I):
+                        break
+                    continue
+                empty = 0
+                pitch = r["cy"] - last_y if pitch is None else min(pitch, r["cy"] - last_y) if r["cy"] - last_y > h * 0.6 else pitch
+                last_y = r["cy"]
+                name = respace(" ".join(l["text"] for l in sorted(cell["inci"], key=lambda l: l["box"][0])))
+                if re.match(r"^(total|รวม|合計)", name, re.I):
+                    continue
+                txt = lambda k: " ".join(l["text"] for l in cell.get(k, []))
+                cas_t = txt("cas")
+                out.append({"inci": name, "jp": "", "th": "", "cas": CAS_RE.findall(cas_t), "cas_text": cas_t,
+                            "pct": _clean_pct(txt("pct")), "func": respace(txt("func")),
+                            "marks": {"inci": [mark(pi, union([l["box"] for l in cell["inci"]]))]},
+                            "row_marks": [mark(pi, union([l["box"] for l in r["f"] if not WATERMARK.match(l["text"].strip())]))]})
+            ri += 1
+    return out
 
 
 def extract_formula(doc):
@@ -496,6 +578,8 @@ def extract_formula(doc):
                     rows.append({"inci": inci, "jp": jp, "th": th, "cas": CAS_RE.findall(cas), "cas_text": cas,
                                  "pct": _clean_pct(pct), "func": func, "marks": marks,
                                  "row_marks": [mark(pi, r.bbox)]})
+    if doc.kind != "table" and doc.ocr_pages:
+        rows += _ocr_formula(doc)
     if not rows:
         return None
     for i, r in enumerate(rows):
@@ -1183,7 +1267,9 @@ def reg_check(doc, reg):
                 h["conditional"] = True
         it["level"] = ("banned" if any(h["kind"] == "banned" and not h["entry"].get("superseded") and not h.get("conditional") for h in hits)
                        else "restricted" if hits else "guide" if it["guide"] else "ok")
-    words = check_words(doc, reg.db.get("words", [])) if mode == "label" or doc.source == "ocr" else []
+    # คำห้ามใช้ = ชื่อ/ข้อความบนฉลากเท่านั้น — เอกสารสูตร / MSDS / COA ไม่ตรวจ (คำอย่าง Acute, irritate เป็นเนื้อหาปกติของ MSDS)
+    techdoc = re.search(r"safety\s*data\s*sheet|\bMSDS\b|\bSDS\b|certificate\s*of\s*analysis|\bCOA\b|composition", doc.full_text(), re.I)
+    words = check_words(doc, reg.db.get("words", [])) if mode == "label" and not techdoc else []
     summary = {k: sum(1 for i in items if i["level"] == k) for k in ("banned", "restricted", "guide", "ok")}
     summary["words"] = len(words)
     props = [i for i, it in enumerate(items) if it["propellant"]]
