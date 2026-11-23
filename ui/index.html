@@ -121,6 +121,9 @@ table.xt td.bad{background:#FECACA}
 .detail h4{margin:0 0 6px;font-size:14px}
 .kv{display:grid;grid-template-columns:96px 1fr;gap:3px 10px;font-size:12.5px;margin:6px 0}
 .kv div:nth-child(odd){color:var(--muted)}
+.cnd{display:block!important;padding:9px 12px!important;border-left:3px solid var(--warn)}.cnd.bad{border-left-color:var(--bad)}.cnd.info{border-left-color:var(--info)}
+.cnd .ct{font-weight:600;margin-bottom:3px}.cnd .cl{font-size:12px;color:var(--muted);margin:2px 0}.cnd .cl.b{color:var(--bad)}
+.cchip{display:inline-block;font-size:12px;padding:1px 8px;margin:3px 4px 0 0;border-radius:10px;background:#1C2029;border:1px solid var(--line2);cursor:pointer;color:var(--text)}.cchip:hover{border-color:#4FB3FF}
 .hit{border:1px solid var(--line2);border-radius:8px;padding:8px 10px;margin:8px 0;background:var(--panel)}
 .hit.banned{border-color:#5A2326} .hit.restricted{border-color:#4A3A12} .hit.guide{border-color:#3A2F66}
 .uses{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -492,27 +495,53 @@ function cosHtml(c,name){if(!c)return'';
 
 /* ---------------- TAB 2 regulation ---------------- */
 const LV={banned:['!','ห้ามใช้','bad'],restricted:['⚠','วัตถุที่อาจใช้ (มีเงื่อนไข)','warn'],guide:['i','มีในหลักเกณฑ์ อย.','info'],ok:['✓','ไม่พบในบัญชี','ok']};
+const COND={aerosol:['สเปรย์อัดแก๊ส','ไม่ใช่สเปรย์อัดแก๊ส'],spray:['สเปรย์/ฉีดพ่น','ไม่ใช่สเปรย์'],child3:['เด็ก < 3 ปี','ห้ามใช้ในเด็ก < 3 ปี'],child10:['เด็ก < 10 ปี','ห้ามใช้ในเด็ก < 10 ปี'],purpose:['วัตถุประสงค์','ต้องแสดงวัตถุประสงค์'],amount:['ปริมาณ','ต้องแจ้งปริมาณ']};
+function condCards(r){const out=[],gas=r.gas&&r.gas.props||[],by=k=>(r.conds||[]).find(c=>c.key===k),aer=by('aerosol'),spr=by('spray');
+  const nm=is=>is.map(i=>r.items[i].name).join(', ');
+  if(gas.length){const bad=[...new Set([...(aer?aer.items:[]),...(spr?spr.items:[])].map(x=>x.i))];
+    out.push({k:'gas',cls:bad.length?'bad':'warn',title:'พบก๊าซขับดัน → ผลิตภัณฑ์นี้เป็นสเปรย์อัดแก๊ส (AEROSOL)',items:gas,
+      lines:['ก๊าซขับดันในสูตร: '+nm(gas),'ตอนจดแจ้งให้เลือกลักษณะผลิตภัณฑ์เป็น “ผลิตภัณฑ์อัดแก๊ส”'].concat(bad.length?['!ขัดกัน: สูตรมีสารที่ห้ามใช้ในผลิตภัณฑ์สเปรย์ ('+nm(bad)+') — ต้องตัดสารออก หรือเปลี่ยนรูปแบบผลิตภัณฑ์']:[])})}
+  for(const c of r.conds||[]){const is=c.items.map(x=>x.i);let cls='warn',lines=[];
+    if(c.key==='aerosol'){if(gas.length){cls='bad';lines=['!สูตรมีก๊าซขับดัน (สเปรย์อัดแก๊ส) แต่สารเหล่านี้ห้ามใช้ในสเปรย์อัดแก๊ส']}
+      else lines=['สูตรไม่มีก๊าซขับดัน → ตอนจดแจ้งเลือก “ผลิตภัณฑ์ไม่อัดแก๊ส” และต้องเพิ่มเงื่อนไข “ผลิตภัณฑ์นี้ไม่ใช่ผลิตภัณฑ์รูปแบบสเปรย์อัดแก๊ส (AEROSOL SPRAY)”','ถ้าผลิตภัณฑ์เป็นสเปรย์อัดแก๊ส ห้ามใช้สารเหล่านี้']}
+    else if(c.key==='spray'){if(gas.length){cls='bad';lines=['!สูตรมีก๊าซขับดัน (เป็นสเปรย์) แต่สารเหล่านี้ห้ามใช้ในผลิตภัณฑ์ฉีดพ่น/สเปรย์']}
+      else lines=['ตอนจดแจ้งต้องเพิ่มเงื่อนไข “ผลิตภัณฑ์นี้ไม่ใช่ผลิตภัณฑ์รูปแบบฉีดพ่นหรือสเปรย์ (SPRAY)”','ถ้าผลิตภัณฑ์เป็นสเปรย์หรือฉีดพ่น (แม้ไม่อัดแก๊ส) ห้ามใช้สารเหล่านี้']}
+    else if(c.key==='child3'||c.key==='child10')lines=['ตอนจดแจ้งต้องเพิ่มเงื่อนไข “'+c.title+'”','ถ้าเป็นผลิตภัณฑ์สำหรับเด็กในช่วงอายุนี้ ห้ามใช้สารเหล่านี้'];
+    else if(c.key==='purpose'){cls='info';lines=['ตอนจดแจ้งต้องระบุวัตถุประสงค์ของการใช้สารเหล่านี้ (เช่น วัตถุกันเสีย / ปรับสภาพ / สารขัดผิว)']}
+    else if(c.key==='amount'){cls='info';const miss=is.filter(i=>r.items[i].pct==null);lines=['ตอนจดแจ้งต้องแจ้งปริมาณ (%) ของสารเหล่านี้ในตำรับ'].concat(miss.length?['!ยังไม่มี % ในไฟล์: '+nm(miss)]:[])}
+    else lines=['ต้องเพิ่มเงื่อนไขนี้ประกอบการจดแจ้ง'];
+    out.push({k:c.key,cls,title:'เงื่อนไขจดแจ้ง: '+c.title,items:is,lines,page:c.page,rect:c.rect,c})}
+  return out}
+function condCardHtml(r,cd,j,live){return `<div class="row cnd ${cd.cls}" data-s="conds" data-c="${j}"><div class="ct">${cd.cls==='bad'?'⛔ ':cd.cls==='info'?'ℹ ':'⚠ '}${esc(cd.title)}</div>
+  ${cd.lines.map(l=>l[0]==='!'?`<div class="cl b">${esc(l.slice(1))}</div>`:`<div class="cl">${esc(l)}</div>`).join('')}
+  <div>${cd.items.map(i=>`<span class="cchip" data-ci="${i}">${esc(r.items[i].name)}</span>`).join('')}</div>
+  ${cd.page&&live?`<a class="lk" data-cp="${j}">หลักเกณฑ์ อย. หน้า ${cd.page} ›</a>`:cd.page?`<span class="mini">หลักเกณฑ์ อย. หน้า ${cd.page}</span>`:''}</div>`}
+function condTags(it){return (it.propellant?'<span class="tag warn">ก๊าซขับดัน</span>':'')+(it.conds||[]).map(k=>`<span class="tag ${k==='purpose'||k==='amount'?'info':'warn'}">${esc(COND[k]?COND[k][1]:k)}</span>`).join('')}
+function banTag(hh){return hh.conditional?`<span class="tag warn">ห้ามใช้ถ้ามีสิ่งเจือปน ลำดับ ${hh.entry.no}</span>`:`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}${hh.entry.superseded?' (ฉบับเดิม)':''}</span>`}
 function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
   $('#regHint').textContent=(r.mode==='formula'?'อ่านจากตารางสูตร':'อ่านจากรายการส่วนประกอบบนฉลาก')+` · ${r.items.length} รายการ`;
   $('#btnCos').disabled=false;$('#btnExp2').disabled=false;$('#btnRep2').disabled=false;
   if(r.error)toast(r.error,true);
   const cosBad=r.items.filter(it=>{const c=S.cos[(it.name||'').toUpperCase().trim()];return it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error'}).length;
-  const chips=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['cos','ชื่อไม่ตรง CosIng',cosBad,'near'],['ok','ผ่าน',s.ok,'ok']];
+  const chips=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['conds','เงื่อนไขจดแจ้ง',s.conds||0,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['cos','ชื่อไม่ตรง CosIng',cosBad,'near'],['ok','ผ่าน',s.ok,'ok']];
   $('#sum2').innerHTML=chips.map(([k,t,n,c])=>`<span class="chip ${c} ${S.f2===k?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
   $$('#sum2 .chip').forEach(c=>c.onclick=()=>{S.f2=c.dataset.k;renderReg()});
   const f=S.f2;let h='';
   const order=['banned','restricted','guide','ok'];
+  S.cards=condCards(r);
+  if((f==='all'||f==='conds')&&S.cards.length){const cs=S.cards.map((c,j)=>[c,j]).filter(([c])=>qHit(S.q2,[c.title,...c.lines,...c.items.map(i=>r.items[i].name)]));
+    if(cs.length)h+=`<div class="grp">เงื่อนไขที่ต้องระบุตอนจดแจ้ง (${cs.length})</div>`+cs.map(([c,j])=>condCardHtml(r,c,j,true)).join('')}
   const wl=r.words.map((w,i)=>[w,i]).filter(([w])=>qHit(S.q2,[w.found,w.line,w.word.word]));
   if(f==='all'||f==='words'){if(wl.length)h+=`<div class="grp">คำห้ามใช้ในชื่อ/ข้อความบนฉลาก (${wl.length})</div>`+wl.map(([w,i])=>
       `<div class="row ${S.sel2==='w'+i?'sel':''}" data-w="${i}"><div class="ic word">!</div><div><div class="nm">“${esc(w.found)}”</div>
        <div class="sub">${esc(w.line)}</div><span class="tag warn">คำห้ามใช้ ลำดับ ${w.word.no}: ${esc(w.word.word)}</span></div><div class="meta">หน้า ${w.word.page}</div></div>`).join('')}
-  if(f!=='words')for(const lv of order){
+  if(f!=='words'&&f!=='conds')for(const lv of order){
     const items=r.items.map((it,i)=>[it,i]).filter(([it])=>it.level===lv&&(f==='all'||f===lv||(f==='cos'&&it._cos&&it._cos.status!=='exact'&&it._cos.status!=='error')))
       .filter(([it])=>qHit(S.q2,[it.name,it.jp,it.th,it.cas.join(' '),...it.hits.map(h=>'ลำดับ '+h.entry.no+' '+(h.entry.name||h.entry.chem||''))]));
     if(!items.length)continue;
     h+=`<div class="grp">${LV[lv][1]} (${items.length})</div>`+items.map(([it,i])=>{
-      const tags=it.hits.map(hh=>hh.kind==='banned'?`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}${hh.entry.superseded?' (ฉบับเดิม)':''}</span>`
-        :`<span class="tag warn">อาจใช้ ลำดับ ${hh.entry.no}</span>`).join('')+(it.guide.length?`<span class="tag info">หลักเกณฑ์ หน้า ${[...new Set(it.guide.map(g=>g.page))].join(', ')}</span>`:'')
+      const tags=it.hits.map(hh=>hh.kind==='banned'?banTag(hh)
+        :`<span class="tag warn">อาจใช้ ลำดับ ${hh.entry.no}</span>`).join('')+condTags(it)+(it.guide.length?`<span class="tag info">หลักเกณฑ์ หน้า ${[...new Set(it.guide.map(g=>g.page))].join(', ')}</span>`:'')
         +overTag(it)+cosTag(it);
       return `<div class="row ${S.sel2===i?'sel':''}" data-i="${i}"><div class="ic ${lv}">${LV[lv][0]}</div><div><div class="nm">${esc(it.name)}</div>
         ${it.jp?`<div class="sub"><span class="jp">${esc(it.jp)}</span></div>`:''}${tags}</div>
@@ -520,6 +549,9 @@ function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
   $('#res2').innerHTML=h||`<div class="empty">${S.q2?'ไม่พบสารที่ตรงกับ “'+esc(S.q2)+'”':'ไม่มีรายการในกลุ่มนี้'}</div>`;
   if(S.q2)qMark('#res2',S.q2);
   $$('#res2 .row[data-i]').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover2(i);el.onclick=()=>select2(i)});
+  $$('#res2 .row[data-c]').forEach(el=>{const c=S.cards[+el.dataset.c];el.onmouseenter=()=>V.reg.mark(c.items.flatMap(i=>r.items[i].marks),c.cls==='bad'?'bad':'warn');el.onclick=e=>{if(!e.target.closest('.cchip,[data-cp]'))selectCond(+el.dataset.c)}});
+  $$('#res2 .cchip').forEach(el=>{const i=+el.dataset.ci;el.onmouseenter=e=>{e.stopPropagation();hover2(i)};el.onmouseleave=()=>{const c=S.cards[+el.closest('[data-c]').dataset.c];V.reg.mark(c.items.flatMap(k=>r.items[k].marks),c.cls==='bad'?'bad':'warn',false)};el.onclick=()=>select2(i)});
+  $$('#res2 [data-cp]').forEach(a=>a.onclick=()=>{const c=S.cards[+a.dataset.cp];openReg('forbidden-words.pdf',c.page,c.rect,'')});
   $$('#res2 .row[data-w]').forEach(el=>{const i=+el.dataset.w;el.onmouseenter=()=>V.reg.mark(S.reg.words[i].marks,'warn');el.onclick=()=>selectW(i)});
 }
 function maxPct(s){const m=String(s||'').match(/(\d+(?:\.\d+)?)\s*%/);return m?parseFloat(m[1]):null}
@@ -536,20 +568,29 @@ function select2(i){S.sel2=i;$$('#res2 .row').forEach(e=>e.classList.toggle('sel
     ${it.pct!=null?`<div>ปริมาณในสูตร</div><div>${it.pct}%</div>`:''}</div><div style="margin:4px 0"><a class="lk" id="zoomR">ซูมไปที่ตำแหน่งในไฟล์</a></div>`;
   if(!it.hits.length&&!it.guide.length)h+=`<div class="sub">ไม่พบในบัญชีวัตถุห้ามใช้ / วัตถุที่อาจใช้ ที่ตั้งค่าไว้ (หมายเหตุ: บัญชีวัตถุกันเสีย สี และสารป้องกันแสงแดด ของไทยไม่ได้อยู่ในเอกสารชุดนี้ — ดูข้อมูล EU จาก CosIng ด้านล่าง)</div>`;
   it.hits.forEach((hh,k)=>{const e=hh.entry;
-    if(hh.kind==='banned')h+=`<div class="hit banned"><span class="tag bad">วัตถุห้ามใช้ ลำดับ ${esc(e.no)}</span>${e.superseded?'<span class="tag mut">ถูกแก้ไขภายหลัง</span>':''} <span class="mini">พบโดย ${esc(hh.how)}</span>
+    if(hh.kind==='banned')h+=`<div class="hit ${hh.conditional?'restricted':'banned'}"><span class="tag ${hh.conditional?'warn':'bad'}">วัตถุห้ามใช้${hh.conditional?'แบบมีเงื่อนไข':''} ลำดับ ${esc(e.no)}</span>${hh.conditional?'<div class="mini" style="margin-top:4px">ห้ามใช้เฉพาะเมื่อมีสิ่งเจือปนเกินที่ระบุในชื่อ — ใช้ได้ถ้าวัตถุดิบไม่เกินเกณฑ์ ควรขอ CoA / เอกสารยืนยันจากผู้ผลิตวัตถุดิบ</div>':''}${e.superseded?'<span class="tag mut">ถูกแก้ไขภายหลัง</span>':''} <span class="mini">พบโดย ${esc(hh.how)}</span>
       <div style="margin:6px 0">${esc(e.name)}</div>${e.cas.length?`<div class="mini">CAS ${esc(e.cas.join(', '))}</div>`:''}
       <div class="mini">${esc(e.src)} · หน้า ${e.page}</div><a class="lk" data-src="${k}">ดูในประกาศ ›</a></div>`;
     else h+=`<div class="hit restricted"><span class="tag warn">วัตถุที่อาจใช้ ลำดับ ${esc(e.no)}</span> <span class="mini">พบโดย ${esc(hh.how)}</span>
       <div style="margin:6px 0">${esc(e.chem)}${e.inci&&e.inci!=='-'?' <span class="mini">('+esc(e.inci)+')</span>':''}</div>
       <table class="uses"><tr><th>บริเวณที่ใช้ / การนำไปใช้</th><th>สูงสุด</th><th>เงื่อนไข</th></tr>${e.uses.map(u=>`<tr><td>${esc(u.area)}</td><td>${esc(u.max)}</td><td>${esc(u.cond)}</td></tr>`).join('')}</table>
       <div class="mini" style="margin-top:4px">${esc(e.src)} · หน้า ${e.page}</div><a class="lk" data-src="${k}">ดูในประกาศ ›</a></div>`});
+  (S.cards||[]).forEach((c,j)=>{if(c.items.includes(i))h+=`<div class="hit ${c.cls==='bad'?'banned':'restricted'}"><span class="tag ${c.cls}">${esc(c.title)}</span>${c.lines.map(l=>`<div class="mini" style="margin-top:4px;${l[0]==='!'?'color:var(--bad)':''}">${esc(l[0]==='!'?l.slice(1):l)}</div>`).join('')}<a class="lk" data-cj="${j}">ดูเงื่อนไข ›</a></div>`});
   it.guide.forEach((g,k)=>{h+=`<div class="hit guide"><span class="tag info">หลักเกณฑ์/คำห้ามใช้ อย. หน้า ${g.page}</span><div style="margin:6px 0">${esc(g.line)}</div><a class="lk" data-g="${k}">ดูในเอกสาร ›</a></div>`});
   if(it.latin)h+=`<div class="cos" id="cos2"><span class="mini">กำลังค้น CosIng…</span></div>`;
   d.innerHTML=h;$('#zoomR').onclick=()=>V.reg.focusMarks(it.marks);
   $$('[data-src]',d).forEach(a=>a.onclick=()=>{const e=it.hits[+a.dataset.src].entry;openReg(e.file,e.page,e.rect,e.no)});
+  $$('[data-cj]',d).forEach(a=>a.onclick=()=>selectCond(+a.dataset.cj));
   $$('[data-g]',d).forEach(a=>a.onclick=()=>{const g=it.guide[+a.dataset.g];openReg('forbidden-words.pdf',g.page,g.rect,'')});
   if(it.latin)cosLookup(it.name).then(c=>{const el=$('#cos2');if(el&&S.sel2===i)el.innerHTML=cosHtml(c,it.name)});
 }
+function selectCond(j){const c=S.cards[j],r=S.reg;S.sel2='c'+j;$$('#res2 .row').forEach(e=>e.classList.toggle('sel',e.dataset.c==String(j)));
+  V.reg.mark(c.items.flatMap(i=>r.items[i].marks),c.cls==='bad'?'bad':'warn');const d=$('#det2');d.classList.add('on');
+  let h=`<h4>${esc(c.title)}</h4>`+c.lines.map(l=>`<div class="sub" style="${l[0]==='!'?'color:var(--bad)':''}">${esc(l[0]==='!'?l.slice(1):l)}</div>`).join('');
+  h+='<div class="hit">'+c.items.map(i=>{const it=r.items[i],x=c.c&&c.c.items.find(y=>y.i===i);return `<div style="margin:3px 0"><a class="lk" data-ci="${i}">${esc(it.name)}</a>${it.pct!=null?' · '+fmtPct(it.pct):''}${x?` <span class="mini">(ในหลักเกณฑ์: ${esc(x.listed)})</span>`:''}</div>`}).join('')+'</div>';
+  if(c.page)h+=`<div class="mini">ที่มา: แนวทางการพิจารณารับจดแจ้ง อย. — “รายการสารที่ต้องเพิ่มเงื่อนไขประกอบการจดแจ้งหรือต่ออายุใบรับจดแจ้งเครื่องสำอาง” หน้า ${c.page}</div><a class="lk" id="cpg">ดูในเอกสาร ›</a>`;
+  else h+=`<div class="mini">ก๊าซขับดันที่โปรแกรมรู้จัก: Butane, Isobutane, Propane, Pentane, Dimethyl Ether, HFC-152a, HFC-134a, HFO-1234ze, Nitrogen, Nitrous Oxide, Carbon Dioxide, LPG (หรือคอลัมน์หน้าที่ในสูตรเขียนว่า Propellant)</div>`;
+  d.innerHTML=h;$$('[data-ci]',d).forEach(a=>a.onclick=()=>select2(+a.dataset.ci));const pg=$('#cpg');if(pg)pg.onclick=()=>openReg('forbidden-words.pdf',c.page,c.rect,'')}
 function selectW(i){S.sel2='w'+i;const w=S.reg.words[i];V.reg.mark(w.marks,'warn');const d=$('#det2');d.classList.add('on');
   d.innerHTML=`<h4>คำห้ามใช้: “${esc(w.word.word)}”</h4><div class="sub">พบในข้อความ: ${esc(w.line)}</div>
    <div class="sub" style="margin-top:6px">คำนี้อยู่ในรายการ “คำที่ห้ามนำมาใช้เป็นชื่อหรือส่วนหนึ่งของชื่อการค้าและชื่อเครื่องสำอาง” (ลำดับ ${w.word.no}) — ตรวจว่าเป็นส่วนของชื่อหรือข้อความกล่าวอ้างหรือไม่</div>
@@ -678,14 +719,17 @@ function buildReport(kind){const css=document.querySelector('style').textContent
       .map(([k,t,n,c])=>`<span class="chip ${c} ${k==='all'?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
     cols=`<div class="card" data-viewer="label">${vwHtml('ฉลาก',V.label.view)}</div><div class="card">${'<div class="sum" id="sum">'+sumHtml+'</div><div class="res" id="res">'+listHtml+'</div><div class="detail" id="det"></div>'}</div><div class="card" data-viewer="formula">${vwHtml('สูตร',V.formula.view)}</div>`;
   }else{const r=S.reg,s=r.summary;title='ผลตรวจสารห้ามใช้ อย.';views={reg:V.reg.view};sub=`ไฟล์: ${esc(V.reg.view.name)}`;
-    const order=['banned','restricted','guide','ok'];
+    const order=['banned','restricted','guide','ok'];const cards=condCards(r);
+    if(cards.length)listHtml+=`<div class="grp">เงื่อนไขที่ต้องระบุตอนจดแจ้ง (${cards.length})</div>`+cards.map((c,j)=>{rows['c'+j]={m:{reg:[c.items.flatMap(i=>r.items[i].marks),c.cls==='bad'?'bad':'warn']},
+      d:`<h4>${esc(c.title)}</h4>`+c.lines.map(l=>`<div class="sub">${esc(l.replace(/^!/,''))}</div>`).join('')+`<div class="sub">สาร: ${esc(c.items.map(i=>r.items[i].name).join(', '))}</div>`};
+      return condCardHtml(r,c,j,false).replace('data-c="'+j+'"','data-i="c'+j+'"')}).join('');
     order.forEach(lv=>{const its=r.items.map((it,i)=>[it,i]).filter(([it])=>it.level===lv);if(!its.length)return;
       listHtml+=`<div class="grp">${LV[lv][1]} (${its.length})</div>`+its.map(([it,i])=>{rows[i]={m:{reg:[it.marks,lv==='banned'?'bad':lv==='restricted'?'warn':'hl']},d:regDetailHtml(it)};
-        const tags=it.hits.map(hh=>hh.kind==='banned'?`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}</span>`:`<span class="tag warn">อาจใช้ ลำดับ ${hh.entry.no}</span>`).join('')+overTag(it)+(it.latin&&it._cos?cosTag(it):'');
+        const tags=it.hits.map(hh=>hh.kind==='banned'?banTag(hh):`<span class="tag warn">อาจใช้ ลำดับ ${hh.entry.no}</span>`).join('')+condTags(it)+overTag(it)+(it.latin&&it._cos?cosTag(it):'');
         return `<div class="row" data-s="${lv}" data-i="${i}"><div class="ic ${lv}">${LV[lv][0]}</div><div><div class="nm">${esc(it.name)}</div>${tags}</div><div class="meta">${it.cas.length?esc(it.cas[0]):''}${it.pct!=null?'<br>'+fmtPct(it.pct):''}</div></div>`}).join('')});
     if(r.words.length)listHtml+=`<div class="grp">คำห้ามใช้บนฉลาก (${r.words.length})</div>`+r.words.map((w,k)=>{const i='w'+k;rows[i]={m:{reg:[w.marks,'warn']},d:`<h4>คำห้ามใช้: “${esc(w.word.word)}”</h4><div class="sub">${esc(w.line)}</div>`};
       return `<div class="row" data-s="words" data-i="${i}"><div class="ic word">!</div><div><div class="nm">“${esc(w.found)}”</div><div class="sub">${esc(w.line)}</div></div><div class="meta">ลำดับ ${w.word.no}</div></div>`}).join('');
-    sumHtml=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['ok','ผ่าน',s.ok,'ok']]
+    sumHtml=[['all','ทั้งหมด',r.items.length,''],['banned','ห้ามใช้',s.banned,'bad'],['restricted','มีเงื่อนไข',s.restricted,'warn'],['conds','เงื่อนไขจดแจ้ง',cards.length,'warn'],['words','คำห้ามใช้',s.words,'warn'],['guide','หลักเกณฑ์',s.guide,'info'],['ok','ผ่าน',s.ok,'ok']]
       .map(([k,t,n,c])=>`<span class="chip ${c} ${k==='all'?'on':''}" data-k="${k}">${t}<b>${n}</b></span>`).join('');
     cols=`<div class="card" data-viewer="reg">${vwHtml('ไฟล์ที่ตรวจ',V.reg.view)}</div><div class="card"><div class="sum" id="sum">${sumHtml}</div><div class="res" id="res">${listHtml}</div><div class="detail" id="det"></div></div>`}
   const data=JSON.stringify({views,rows,persist}).replace(/</g,'\\u003c');
@@ -713,9 +757,11 @@ $('#btnExp2').onclick=async()=>{const r=S.reg;const rows=r.items.map(it=>({level
   hits:it.hits.map(h=>(h.kind==='banned'?'ห้ามใช้ ลำดับ ':'อาจใช้ ลำดับ ')+h.entry.no+' (หน้า '+h.entry.page+')').join('; '),
   limit:it.hits.filter(h=>h.kind==='restricted').flatMap(h=>h.entry.uses.map(u=>u.area+': '+u.max)).join(' | '),
   cosing:it._cos?(it._cos.status==='exact'?'ตรง':it._cos.status==='error'?'':'ไม่ตรง: '+(it._cos.suggestions||[]).slice(0,2).map(s=>s.inci).join(', ')):'',
-  guide:it.guide.map(g=>'หน้า '+g.page).join(', ')}));
+  guide:it.guide.map(g=>'หน้า '+g.page).join(', '),
+  conds:[it.propellant?'ก๊าซขับดัน (ผลิตภัณฑ์อัดแก๊ส)':'',...(it.conds||[]).map(k=>{const c=(r.conds||[]).find(c=>c.key===k);return c?c.title:k})].filter(Boolean).join('; ')}));
+  const conds=condCards(r).map(c=>({title:c.title,note:c.lines.map(l=>l.replace(/^!/,'⛔ ')).join(' / '),items:c.items.map(i=>r.items[i].name).join(', '),page:c.page||''}));
   const words=r.words.map(w=>({word:w.word.word,found:w.found,line:w.line,no:w.word.no}));
-  const res=await api.export_report('reg',{rows,words},V.reg.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
+  const res=await api.export_report('reg',{rows,words,conds},V.reg.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
 
 /* ---------------- start ---------------- */
 window.addEventListener('pywebviewready',async()=>{api=window.pywebview.api;refreshInfo();checkUpd();loadSummaries();

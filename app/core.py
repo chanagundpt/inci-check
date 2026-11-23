@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -858,6 +858,8 @@ class RegDB:
             except Exception:
                 pass
         self.db = max(dbs, key=lambda d: d.get("version", "")) if dbs else {"banned": [], "restricted": [], "words": [], "mentions": []}
+        for b in self.db.get("banned", []):  # อักษรฟอนต์ Symbol ที่หลุดมาจาก PDF
+            b["name"] = b["name"].replace("", "≥").replace("", "≤").replace("", ">").replace("", "<")
         self._index()
 
     def _index(self):
@@ -889,6 +891,12 @@ class RegDB:
                 add_name(n, ref)
                 for alt in banned_alts(n):
                     add_name(alt, ref)
+        self.conds = {}
+        for ci, c in enumerate(self.db.get("conds", [])):
+            for it in c["items"]:
+                k = norm_latin(it["name"])
+                if len(k) >= 4:
+                    self.conds.setdefault(k, []).append((ci, it))
         self.mentions = {}
         for m in self.db.get("mentions", []):
             line = m["line"].strip()
@@ -925,6 +933,16 @@ class RegDB:
         out.sort(key=lambda h: (h["kind"] != "banned", bool(h["entry"].get("superseded"))))
         return out
 
+    def cond_hits(self, names):
+        """เงื่อนไขที่ต้องเพิ่มประกอบการจดแจ้ง (หลักเกณฑ์ อย.) ของสารนี้"""
+        out, seen = [], set()
+        for n in names:
+            for ci, it in self.conds.get(norm_latin(n), []):
+                if ci not in seen:
+                    seen.add(ci)
+                    out.append((ci, it))
+        return out
+
     def guideline(self, names):
         out, seen = [], set()
         for n in names:
@@ -944,6 +962,7 @@ SALT_RE = re.compile(r",?\s*(and\s+)?(its|their)\s+(salts?|esters?|isomers?|deri
 def banned_alts(name):
     name = re.sub(r"\[ข้อความ.*?\]", "", name)
     name = re.split(r"\s+ยกเว้น|\s+เว้นแต่|\s+except\b", name)[0]
+    name = re.split(r",?\s+(?:if|when) (?:it|they) contains?\b", name)[0]  # "Butane, if it contains ≥0.1% Butadiene" → Butane
     alts = set()
     base = SALT_RE.sub("", name).strip(" ,;")
     for s in (name, base):
@@ -1108,27 +1127,70 @@ def reg_items(doc):
         items = []
         for r in rows:
             items.append({"name": r["inci"] or r["label"], "jp": r["jp"], "th": r["th"], "cas": r["cas"],
-                          "pct": r["pct"], "marks": r["marks"].get("inci") or r["row_marks"],
+                          "pct": r["pct"], "func": r.get("func", ""), "marks": r["marks"].get("inci") or r["row_marks"],
                           "row_marks": r["row_marks"], "from": "formula"})
         return items, "formula", None
     lab = extract_label(doc)
-    items = [{"name": it["text"], "jp": "", "th": "", "cas": [], "pct": None, "marks": it["marks"],
+    items = [{"name": it["text"], "jp": "", "th": "", "cas": [], "pct": None, "func": "", "marks": it["marks"],
               "row_marks": it["marks"], "from": "label"} for it in lab["items"]]
     return items, "label", lab.get("error")
 
 
+# ก๊าซขับดัน (propellant) — มีในสูตร = ผลิตภัณฑ์สเปรย์อัดแก๊ส (aerosol)
+PROPELLANTS = {norm_latin(x) for x in (
+    "Butane", "Isobutane", "n-Butane", "Propane", "Pentane", "Isopentane", "Dimethyl Ether", "DME",
+    "Hydrofluorocarbon 152a", "HFC-152a", "HFC 152a", "1,1-Difluoroethane", "Difluoroethane",
+    "Hydrofluorocarbon 134a", "HFC-134a", "Tetrafluoroethane", "Tetrafluoropropene", "HFO-1234ze", "Trans-1,3,3,3-Tetrafluoroprop-1-ene",
+    "Hydrofluoroolefin", "Nitrogen", "Nitrous Oxide", "Carbon Dioxide", "Liquefied Petroleum Gas", "LPG",
+    "Isobutane/Propane", "Butane/Propane", "Propane/Butane", "Compressed Air")}
+PROPELLANT_JP = ("ＬＰＧ", "LPG", "ジメチルエーテル", "窒素", "二酸化炭素", "炭酸ガス", "亜酸化窒素", "イソブタン", "ブタン", "プロパン",
+                 "イソペンタン", "ペンタン", "液化石油ガス", "噴射剤")
+PROPELLANT_FUNC = re.compile(r"propellant|噴射剤|ก๊าซขับดัน|แก๊สขับดัน", re.I)
+
+
+COND_BAN = re.compile(r"\b(if|when) (it|they) contains?\b|\bcontaining (more|less) than\b", re.I)
+
+
+def is_propellant(it, names):
+    if any(norm_latin(n) in PROPELLANTS for n in names):
+        return True
+    jp = unicodedata.normalize("NFKC", it.get("jp") or "")
+    if jp and any(jp.strip() == unicodedata.normalize("NFKC", j) for j in PROPELLANT_JP):
+        return True
+    return bool(PROPELLANT_FUNC.search(it.get("func") or ""))
+
+
 def reg_check(doc, reg):
     items, mode, err = reg_items(doc)
-    for it in items:
+    conds = {}
+    for idx, it in enumerate(items):
         names = [it["name"]] + [p for p in re.split(r"[/()]", it["name"]) if len(p.strip()) > 3]
         hits = reg.lookup(names, it["cas"])
         it["hits"] = hits
+        it["conds"] = []
+        for ci, ent in reg.cond_hits(names):
+            c = reg.db["conds"][ci]
+            it["conds"].append(c["key"])
+            g = conds.setdefault(ci, {"key": c["key"], "title": c["title"], "page": c["page"], "rect": c["rect"],
+                                      "items": []})
+            g["items"].append({"i": idx, "name": it["name"], "listed": ent["name"], "page": ent["page"], "rect": ent["rect"]})
+        it["propellant"] = is_propellant(it, names)
         it["guide"] = reg.guideline(names)
         latin = re.sub(r"[^A-Za-z]", "", it["name"])
         it["latin"] = len(latin) >= 3 and not has_cjk(it["name"]) and not has_thai(it["name"])
-        it["level"] = ("banned" if any(h["kind"] == "banned" and not h["entry"].get("superseded") for h in hits)
+        for h in hits:  # ห้ามใช้แบบมีเงื่อนไข เช่น "Butane, if it contains ≥0.1% Butadiene"
+            if h["kind"] == "banned" and COND_BAN.search(h["entry"].get("name", "")):
+                h["conditional"] = True
+        it["level"] = ("banned" if any(h["kind"] == "banned" and not h["entry"].get("superseded") and not h.get("conditional") for h in hits)
                        else "restricted" if hits else "guide" if it["guide"] else "ok")
     words = check_words(doc, reg.db.get("words", [])) if mode == "label" or doc.source == "ocr" else []
     summary = {k: sum(1 for i in items if i["level"] == k) for k in ("banned", "restricted", "guide", "ok")}
     summary["words"] = len(words)
-    return {"items": items, "mode": mode, "error": err, "words": words, "summary": summary}
+    props = [i for i, it in enumerate(items) if it["propellant"]]
+    cl = sorted(conds.values(), key=lambda g: [k for _, k in COND_ORDER].index(g["key"]) if g["key"] in [k for _, k in COND_ORDER] else 99)
+    summary["conds"] = len(cl) + (1 if props else 0)
+    return {"items": items, "mode": mode, "error": err, "words": words, "summary": summary,
+            "conds": cl, "gas": {"props": props, "aerosol": bool(props)}}
+
+
+COND_ORDER = [("", "aerosol"), ("", "spray"), ("", "child3"), ("", "child10"), ("", "purpose"), ("", "amount")]

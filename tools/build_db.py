@@ -271,6 +271,85 @@ def parse_mentions(fn, skip_pages=()):
     return out
 
 
+COND_KEYS = [  # (คำในหัวข้อ, key) — ลำดับสำคัญ: "สเปรย์อัดแก๊ส" ก่อน "สเปรย์"
+    ("อัดแก๊ส", "aerosol"), ("ฉีดพ่น", "spray"), ("ต่ำกว่า 3 ปี", "child3"), ("ต่ำกว่า 10 ปี", "child10"),
+    ("วัตถุประสงค์", "purpose"), ("แจ้งปริมาณ", "amount"),
+]
+
+
+def parse_conds(fn):
+    """ตาราง "รายการสารที่ต้องเพิ่มเงื่อนไขประกอบการจดแจ้งหรือต่ออายุใบรับจดแจ้งเครื่องสำอาง"
+    ซ้าย = เงื่อนไข (ช่องที่ต้องติ๊กตอนจดแจ้ง), ขวา = รายชื่อสาร"""
+    d = pymupdf.open(os.path.join(REGS, fn))
+    start = None
+    for pi, pg in enumerate(d):
+        t = pg.get_text()
+        if "รายการสารที่ต้องเพิ่มเงื่อนไขประกอบการจดแจ้ง" in t and "ต่ำกว่า 3 ปี" in t:
+            start = pi  # หน้าตารางจริง (ไม่ใช่สารบัญ)
+            break
+    if start is None:
+        return []
+    conds, cur = [], None
+    for pi in range(start, len(d)):
+        pg = d[pi]
+        lines = []
+        for b in pg.get_text("dict")["blocks"]:
+            for l in b.get("lines", []):
+                t = clean("".join(s["text"] for s in l["spans"]))
+                if t:
+                    lines.append((l["bbox"], t))
+        heads, items = [], []
+        for bb, t in lines:
+            if bb[1] < 60 or "รายการสารที่ต้องเพิ่มเงื่อนไข" in t:
+                continue
+            (heads if bb[0] < 290 else items).append((bb, t))
+        # หัวข้อหลายบรรทัด → รวมบรรทัดที่ห่างกันไม่เกิน 26pt
+        merged = []
+        for bb, t in sorted(heads, key=lambda x: x[0][1]):
+            haskey = lambda s: any(w in s for w, _ in COND_KEYS)
+            if merged and bb[1] - merged[-1][0][3] < 12 and not (haskey(merged[-1][1]) and haskey(t)):
+                pb, pt = merged[-1]
+                merged[-1] = ((pb[0], pb[1], max(pb[2], bb[2]), bb[3]), pt + " " + t)
+            else:
+                merged.append((bb, t))
+        newheads = []
+        for bb, t in merged:
+            if "(ต่อ" in t:
+                continue
+            key = next((k for w, k in COND_KEYS if w in t), None)
+            if key:
+                newheads.append((bb[1] - 3, {"key": key, "title": t, "page": pi + 1,
+                                             "rect": [round(v, 1) for v in bb], "items": []}))
+        if not newheads and not cur:
+            continue
+        # รายชื่อ: "1." แยกบรรทัดกับชื่อ / ชื่อยาว 2 บรรทัด (บรรทัดต่อไม่มีเลข)
+        rows = []
+        for bb, t in sorted(items, key=lambda x: (round(x[0][1]), x[0][0])):
+            m = re.match(r"^(\d{1,3})\.\s*(.*)$", t)
+            if m:
+                rows.append([bb, m.group(2).strip(), bb[1]])
+            elif re.match(r"^-\s", t) or (rows and rows[-1][1].startswith("หรือ")):
+                if rows:
+                    rows[-1][1] += " " + t
+            elif rows and (not rows[-1][1] or (bb[1] - rows[-1][0][3] < 12 and bb[0] > 320)):
+                pb = rows[-1][0]
+                rows[-1][0] = (min(pb[0], bb[0]), min(pb[1], bb[1]), max(pb[2], bb[2]), max(pb[3], bb[3]))
+                rows[-1][1] = (rows[-1][1] + " " + t).strip()
+        for bb, name, y in rows:
+            owner = cur
+            for hy, h in newheads:
+                if y >= hy:
+                    owner = h
+            if owner is None or not re.search(r"[A-Z]{3}", name):
+                continue
+            owner["items"].append({"name": name, "page": pi + 1, "rect": [round(v, 1) for v in bb]})
+        for _, h in newheads:
+            conds.append(h)
+        if newheads:
+            cur = newheads[-1][1]
+    return conds
+
+
 def build():
     db = {"version": datetime.date.today().isoformat()}
     db["banned"] = parse_banned("banned-2566-update-2568.pdf", "บัญชีวัตถุห้ามใช้ พ.ศ. 2566 (ปรับปรุงถึง ม.ค. 2568)")
@@ -282,6 +361,7 @@ def build():
     db["restricted"] = parse_restricted("restricted-2561-amend1-9.pdf")
     db["words"] = parse_words("forbidden-words.pdf")
     db["mentions"] = parse_mentions("forbidden-words.pdf", {w["page"] for w in db["words"]})
+    db["conds"] = parse_conds("forbidden-words.pdf")
     db["sources"] = {
         "banned-2566-update-2568.pdf": "ประกาศกระทรวงสาธารณสุข เรื่อง ชื่อวัตถุที่ห้ามใช้เป็นส่วนผสมในการผลิตเครื่องสำอาง พ.ศ. 2566 (รวมฉบับแก้ไขถึง 31 ม.ค. 2568)",
         "restricted-2561-amend1-9.pdf": "ประกาศกระทรวงสาธารณสุข เรื่อง กำหนดชื่อ ปริมาณ และเงื่อนไขของวัตถุที่อาจใช้เป็นส่วนผสมในการผลิตเครื่องสำอาง พ.ศ. 2561 (รวมฉบับแก้ไขที่ 1–9)",

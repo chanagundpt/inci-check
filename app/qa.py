@@ -36,6 +36,28 @@ def _grams(s, n=3):
     return [s[i:i + n] for i in range(max(0, len(s) - n + 1))] or ([s] if s else [])
 
 
+COND_ADVICE = {
+    "aerosol": "ถ้าผลิตภัณฑ์ไม่ใช่สเปรย์อัดแก๊ส: ตอนจดแจ้งต้องเพิ่มเงื่อนไข “ผลิตภัณฑ์นี้ไม่ใช่ผลิตภัณฑ์รูปแบบสเปรย์อัดแก๊ส (AEROSOL SPRAY)” — ถ้าเป็นสเปรย์อัดแก๊ส ห้ามใช้สารนี้",
+    "spray": "ถ้าผลิตภัณฑ์ไม่ใช่สเปรย์: ตอนจดแจ้งต้องเพิ่มเงื่อนไข “ผลิตภัณฑ์นี้ไม่ใช่ผลิตภัณฑ์รูปแบบฉีดพ่นหรือสเปรย์ (SPRAY)” — ถ้าเป็นสเปรย์/ฉีดพ่น ห้ามใช้สารนี้",
+    "child3": "ตอนจดแจ้งต้องเพิ่มเงื่อนไข “ห้ามใช้ในเด็กอายุต่ำกว่า 3 ปี”",
+    "child10": "ตอนจดแจ้งต้องเพิ่มเงื่อนไข “ห้ามใช้ในเด็กอายุต่ำกว่า 10 ปี”",
+    "purpose": "ตอนจดแจ้งต้องแสดงวัตถุประสงค์ของการใช้สารนี้ (เช่น วัตถุกันเสีย / ปรับสภาพผม / ฯลฯ)",
+    "amount": "ตอนจดแจ้งต้องแจ้งปริมาณ (%) ของสารนี้ในตำรับ",
+}
+
+
+def cond_notes(reg, names):
+    """คำตอบเรื่องเงื่อนไขที่ต้องเพิ่มประกอบการจดแจ้ง (หลักเกณฑ์ อย. ตารางท้ายเล่ม)"""
+    out = []
+    for ci, ent in reg.cond_hits(names):
+        c = reg.db["conds"][ci]
+        out.append({"type": "warn", "title": "เงื่อนไขที่ต้องระบุตอนจดแจ้ง: " + c["title"],
+                    "lines": [COND_ADVICE.get(c["key"], c["title"]), "อยู่ในรายการ: " + ent["name"]],
+                    "refs": [{"file": "forbidden-words.pdf", "page": ent["page"], "rect": ent["rect"],
+                              "label": "หลักเกณฑ์ หน้า %d" % ent["page"]}]})
+    return out
+
+
 class QA:
     def __init__(self, reg):
         self.reg = reg
@@ -100,6 +122,29 @@ class QA:
                         "lines": ["วัตถุห้ามใช้ %d รายการ (บัญชี พ.ศ. 2566 ปรับปรุงถึง ม.ค. 2568)" % len(db["banned"]),
                                   "วัตถุที่อาจใช้ (มีเงื่อนไข) %d รายการ (ประกาศ พ.ศ. 2561 + ฉบับแก้ไข)" % len(db["restricted"]),
                                   "คำห้ามใช้ในชื่อเครื่องสำอาง %d คำ (ฉบับปรับปรุง 2 ธ.ค. 2564)" % len(db.get("words", []))]})
+
+        # เงื่อนไขที่ต้องระบุตอนจดแจ้ง (สเปรย์อัดแก๊ส / สเปรย์ / เด็ก / วัตถุประสงค์ / ปริมาณ)
+        topics = []
+        if re.search(r"อัดแก๊ส|อัดก๊าซ|aerosol|แก๊ส|ก๊าซ", q, re.I):
+            topics.append("aerosol")
+        elif re.search(r"สเปรย์|ฉีดพ่น|spray", q, re.I):
+            topics += ["spray", "aerosol"]
+        if re.search(r"เด็ก", q):
+            topics += ["child3", "child10"]
+        if re.search(r"วัตถุประสงค์", q):
+            topics.append("purpose")
+        if re.search(r"แจ้งปริมาณ", q):
+            topics.append("amount")
+        for c in self.reg.db.get("conds", []):
+            if c["key"] in topics and not re.search(r"[A-Za-z]{4}", re.sub(r"aerosol|spray", "", q, flags=re.I)):
+                handled = True
+                lines = [COND_ADVICE.get(c["key"], c["title"]), "สาร %d รายการ: " % len(c["items"]) + ", ".join(i["name"] for i in c["items"])]
+                if c["key"] == "aerosol":
+                    lines.append("ก๊าซขับดัน (เช่น Butane, Isobutane, Propane, Dimethyl Ether, HFC-152a, Nitrogen, Carbon Dioxide) ในสูตร = ผลิตภัณฑ์สเปรย์อัดแก๊ส "
+                                 "— แท็บ “ตรวจสารห้ามใช้ อย.” แจ้งให้เองเมื่อพบ")
+                out.append({"type": "warn", "title": "เงื่อนไขที่ต้องระบุตอนจดแจ้ง: " + c["title"], "lines": lines,
+                            "refs": [{"file": "forbidden-words.pdf", "page": c["page"], "rect": c["rect"],
+                                      "label": "หลักเกณฑ์ หน้า %d" % c["page"]}]})
 
         # ลำดับในประกาศ
         for m in re.finditer(r"ลำดับ(?:ที่)?\s*(\d{1,4}[a-z]?)", q):
@@ -191,7 +236,12 @@ class QA:
         cur = [h for h in hits if not h["entry"].get("superseded")]
         banned = [h for h in cur if h["kind"] == "banned"]
         restr = [h for h in cur if h["kind"] == "restricted"]
-        if banned and not restr:
+        condban = [h for h in banned if core.COND_BAN.search(h["entry"].get("name", ""))]
+        if condban and len(condban) == len(banned) and not restr:
+            out.append({"type": "warn", "title": "“%s” ห้ามใช้เฉพาะกรณีมีสิ่งเจือปนเกินที่กำหนด" % name,
+                        "lines": ["บัญชีวัตถุห้ามใช้ระบุเงื่อนไขไว้ในชื่อ (ดูรายการด้านล่าง) — ใช้ได้ถ้าวัตถุดิบไม่เกินเกณฑ์ "
+                                  "ควรขอ CoA / เอกสารยืนยันจากผู้ผลิตวัตถุดิบเก็บไว้"]})
+        elif banned and not restr:
             out.append({"type": "bad", "title": "“%s” เป็นวัตถุห้ามใช้ในเครื่องสำอาง" % name,
                         "lines": ["ห้ามใช้เป็นส่วนผสมในการผลิตเครื่องสำอาง (พบโดย %s)" % ", ".join(sorted({h["how"] for h in banned}))]})
         elif banned and restr:
@@ -201,7 +251,11 @@ class QA:
             out.append({"type": "warn", "title": "“%s” ใช้ได้ภายใต้เงื่อนไข (วัตถุที่อาจใช้)" % name,
                         "lines": ["ต้องเป็นไปตามบริเวณที่ใช้ ปริมาณสูงสุด และเงื่อนไขในประกาศ"]})
         for h in banned:
-            out.append(self._entry("banned", h["entry"], h["how"]))
+            a = self._entry("banned", h["entry"], h["how"])
+            if h in condban:
+                a["type"] = "warn"
+                a["title"] = a["title"].replace("ห้ามใช้ — ", "ห้ามใช้แบบมีเงื่อนไข — ", 1)
+            out.append(a)
         for h in restr:
             a = self._entry("restricted", h["entry"])
             uses = a["uses"]
@@ -220,6 +274,8 @@ class QA:
                     a["verdict"] = verdict + ("" if a.get("focus") or len(sel) == 1 else " (ขึ้นกับประเภทผลิตภัณฑ์ ดูตาราง)")
                     a["verdict_bad"] = pct > mx
             out.append(a)
+        for line in cond_notes(self.reg, [name]):
+            out.append(line)
         if guide:
             out.append({"type": "info", "title": "มีกล่าวถึงในหลักเกณฑ์การจดแจ้งของ อย.",
                         "lines": [g["line"] for g in guide[:4]],

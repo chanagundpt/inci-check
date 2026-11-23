@@ -240,7 +240,10 @@ class Api:
         else:
             sheet(ws, "สารห้ามใช้ อย.", [("ผล", "level"), ("ชื่อสาร", "name"), ("ชื่อญี่ปุ่น", "jp"), ("CAS", "cas"), ("%", "pct"),
                                         ("พบในบัญชี อย.", "hits"), ("ปริมาณสูงสุด", "limit"), ("CosIng", "cosing"),
-                                        ("หลักเกณฑ์", "guide")], data["rows"])
+                                        ("หลักเกณฑ์", "guide"), ("เงื่อนไขที่ต้องระบุตอนจดแจ้ง", "conds")], data["rows"])
+            if data.get("conds"):
+                sheet(wb.create_sheet(), "เงื่อนไขจดแจ้ง", [("เงื่อนไข", "title"), ("คำแนะนำ", "note"), ("สารที่เกี่ยวข้อง", "items"),
+                                                          ("หลักเกณฑ์ หน้า", "page")], data["conds"])
             if data.get("words"):
                 sheet(wb.create_sheet(), "คำห้ามใช้", [("คำห้ามใช้", "word"), ("ลำดับ", "no"), ("พบ", "found"), ("ข้อความ", "line")],
                       data["words"])
