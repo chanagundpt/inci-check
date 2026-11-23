@@ -154,6 +154,20 @@ class Api:
     def cosing(self, name):
         return self._cosing.check(name)
 
+    def reg_lookup(self, names, cas):
+        """ตรวจซ้ำด้วยชื่อเคมี/CAS จาก CosIng (เมื่อเอกสารใช้ชื่อ INCI ที่ประกาศ อย. ไม่ได้ใช้ หรือ CAS ในเอกสารผิด)"""
+        names = [n for n in (names or []) if n and len(re.sub(r"[^A-Za-z]", "", n)) >= 4]
+        hits = self._reg.lookup(names, cas or [])
+        for h in hits:
+            if h["kind"] == "banned" and core.COND_BAN.search(h["entry"].get("name", "")):
+                h["conditional"] = True
+        conds = []
+        for ci, ent in self._reg.cond_hits(names):
+            c = self._reg.db["conds"][ci]
+            conds.append({"key": c["key"], "title": c["title"], "page": c["page"], "rect": c["rect"],
+                          "listed": ent["name"], "ipage": ent["page"], "irect": ent["rect"]})
+        return {"hits": hits, "conds": conds}
+
     def open_url(self, url):
         if re.match(r"^https?://", url or ""):
             webbrowser.open(url)

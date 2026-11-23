@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.2.3"
+VERSION = "1.2.4"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -928,6 +928,14 @@ def compare(label, formula):
 
 
 # ---------------------------------------------------------------- regulation DB
+# ชื่อ INCI → ชื่อเคมี/ชื่อในประกาศ (เมื่อประกาศไม่ได้ใช้ชื่อ INCI) — เติมเมื่อเจอกรณีจริง
+INCI_CHEM = {
+    "cyclotetrasiloxane": ("Octamethylcyclotetrasiloxane", "D4"),
+    "cyclopentasiloxane": ("Decamethylcyclopentasiloxane", "D5"),
+    "cyclohexasiloxane": ("Dodecamethylcyclohexasiloxane", "D6"),
+}
+
+
 class RegDB:
     def __init__(self):
         self.load()
@@ -999,6 +1007,12 @@ class RegDB:
 
     def lookup(self, names, cas):
         hits, seen = [], set()
+        # ชื่อ INCI ที่ประกาศ อย. ใช้ชื่อเคมีแทน (ตรวจได้แม้ออฟไลน์ / CAS ในเอกสารผิด)
+        extra = []
+        for n in names:
+            for alt in INCI_CHEM.get(norm_latin(n), ()):
+                extra.append(alt)
+        names = list(names) + extra
         for c in cas:
             for ref in self.by_cas.get(c, []):
                 if ref not in seen:

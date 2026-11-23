@@ -542,6 +542,8 @@ function shortCond(t){t=String(t||'').replace(/\s+/g,' ').replace(/ํา/g,'ำ
   return t.length>90?t.slice(0,88)+'…':t}
 function mainConds(it){const out=[],seen=new Set(),add=(cls,t)=>{const k=t.replace(/\s+/g,'');if(!seen.has(k)){seen.add(k);out.push([cls,t])}};
   const gas=S.reg&&S.reg.gas&&S.reg.gas.props.length;
+  if(it.casWarn)add('reg b','⚠ CAS ในเอกสาร ('+it.cas.join(', ')+') ไม่ตรงกับ CosIng ('+it.casWarn.join(', ')+') — ตรวจ CAS ในเอกสารอีกครั้ง');
+  for(const hh of it.hits)if(hh.kind==='banned'&&!hh.conditional&&!hh.entry.superseded)add('reg b','⛔ วัตถุห้ามใช้ ลำดับ '+hh.entry.no+': '+hh.entry.name.slice(0,80)+(hh.how&&hh.how.startsWith('CosIng')?' (พบผ่าน '+hh.how+')':''));
   if(it.propellant)add('reg','ก๊าซขับดัน → ตอนจดแจ้งเลือก “ผลิตภัณฑ์อัดแก๊ส”');
   for(const k of it.conds||[]){const bad=gas&&(k==='aerosol'||k==='spray');const f7=['child3','child10','spray','aerosol'].includes(k);
     add(bad?'reg b':'reg',(bad?'⛔ ขัดกับสูตรที่มีก๊าซขับดัน: ':f7?'☑ ข้อ ๗: ':'📝 ')+REG_TXT[k])}
@@ -640,8 +642,21 @@ let cosRun=0;
 async function runCosing(force){const r=S.reg;if(!r)return;const my=++cosRun;
   if(force){r.items.forEach(it=>{delete it._cos;delete S.cos[(it.name||'').toUpperCase().trim()]})}
   const q=r.items.filter(it=>it.latin&&!it._cos);let k=0;
-  const worker=async()=>{while(k<q.length&&my===cosRun){const it=q[k++];it._cos=await cosLookup(it.name);if(my===cosRun)renderRegLight()}};
+  const worker=async()=>{while(k<q.length&&my===cosRun){const it=q[k++];it._cos=await cosLookup(it.name);if(my===cosRun){await regBridge(r,it);renderRegLight()}}};
   await Promise.all([worker(),worker(),worker(),worker()])}
+// ตรวจซ้ำด้วยชื่อเคมี/CAS จาก CosIng: เอกสารใช้ชื่อ INCI แต่ประกาศ อย. ใช้ชื่อเคมี (เช่น Cyclotetrasiloxane = Octamethylcyclotetrasiloxane; D4) หรือ CAS ในเอกสารผิด
+async function regBridge(r,it){const c=it._cos;if(!c||c.status!=='exact'||!c.best||it._bridged)return;it._bridged=true;
+  const b=c.best,cas=(b.cas||[]).flatMap(x=>String(x).split(/[\s,;/]+/)).filter(x=>/^\d{2,7}-\d\d-\d$/.test(x));
+  if(cas.length&&it.cas.length&&!it.cas.some(x=>cas.includes(x)))it.casWarn=cas;
+  let res;try{res=await api.reg_lookup([b.chemical,...(b.inn||[]),...(b.usa||[])].filter(Boolean),cas)}catch(e){return}
+  if(!res)return;const key=h=>h.kind+'|'+h.entry.no+'|'+h.entry.page;const have=new Set(it.hits.map(key));let added=false;
+  for(const h of res.hits||[]){if(have.has(key(h)))continue;h.how='CosIng → '+(h.how.startsWith('CAS')?h.how:'ชื่อเคมี '+b.chemical);h.bridge=true;it.hits.push(h);added=true}
+  for(const cd of res.conds||[]){if((it.conds||[]).includes(cd.key))continue;it.conds=(it.conds||[]).concat(cd.key);added=true;
+    let g=(r.conds||(r.conds=[])).find(x=>x.key===cd.key);if(!g){g={key:cd.key,title:cd.title,page:cd.page,rect:cd.rect,items:[]};r.conds.push(g)}
+    g.items.push({i:r.items.indexOf(it),name:it.name,listed:cd.listed,page:cd.ipage,rect:cd.irect})}
+  if(added){it.hits.sort((a,b)=>(a.kind!=='banned')-(b.kind!=='banned'));
+    it.level=it.hits.some(h=>h.kind==='banned'&&!h.entry.superseded&&!h.conditional)?'banned':it.hits.length?'restricted':it.guide.length?'guide':'ok';
+    for(const k of ['banned','restricted','guide','ok'])r.summary[k]=r.items.filter(x=>x.level===k).length}}
 let rT=null;function renderRegLight(){clearTimeout(rT);rT=setTimeout(()=>{const st=$('#res2').scrollTop;renderReg();$('#res2').scrollTop=st},150)}
 $('#btnCos').onclick=()=>runCosing(true);
 
