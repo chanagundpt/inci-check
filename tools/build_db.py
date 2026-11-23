@@ -261,8 +261,9 @@ def parse_mentions(fn, skip_pages=()):
             continue
         set_page(pg)
         for bb, t in page_lines(pg):
-            for m in re.finditer(r"[A-Z0-9][A-Z0-9 ,\-/().'\[\]]{3,}[A-Z0-9)]", t):
-                name = m.group(0).strip(" ,-/(")
+            for m in re.finditer(r"[A-Z0-9][A-Z0-9 ,\-/().'\[\]]{2,}[A-Z0-9)]", t):
+                # ตัดเลขลำดับหน้าชื่อ เช่น "43. UREA", "(7) ..."
+                name = re.sub(r"^\(?\d{1,3}[.)]\s*", "", m.group(0)).strip(" ,-/(")
                 if len(re.sub(r"[^A-Z]", "", name)) < 4:
                     continue
                 out.append({"text": name, "page": pi + 1, "line": clean(fix_thai(t)),

@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.1.2"
+VERSION = "1.2.0"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -862,6 +862,13 @@ class RegDB:
 
     def _index(self):
         self.by_cas, self.by_name = {}, {}
+        # วัตถุที่อาจใช้: ลำดับเดียวกันปรากฏซ้ำในประกาศแก้ไขฉบับหลัง = ฉบับหลังใช้แทน
+        last = {}
+        for i, r in enumerate(self.db.get("restricted", [])):
+            r.pop("superseded", None)
+            if r["no"] in last:
+                self.db["restricted"][last[r["no"]]]["superseded"] = True
+            last[r["no"]] = i
         def add_name(n, ref):
             k = norm_latin(n)
             if len(k) >= 4:
@@ -891,7 +898,7 @@ class RegDB:
                 continue
             for part in re.split(r"\s*/\s*|\s+หรือ\s+", m["text"]):
                 k = norm_latin(re.sub(r"\(.*?\)", "", part))
-                if len(k) >= 5:
+                if len(k) >= 4:
                     self.mentions.setdefault(k, []).append(m)
                 for inner in re.findall(r"\(([^)]+)\)", part):
                     k2 = norm_latin(inner)
@@ -944,10 +951,13 @@ def banned_alts(name):
             p = part.strip()
             if p:
                 alts.add(p)
-                np_ = re.sub(r"\(([^()]*)\)", "", p).strip()
-                if np_:
+                # วงเล็บที่เป็น "ชื่อเรียกอื่น" ต้องแยกเป็นคำ เช่น "... hydroxide (Acetylcholine)"
+                # ไม่ใช่วงเล็บที่เป็นส่วนของชื่อเคมี เช่น "(2-Isopropylpent-4-enoyl)urea" (เดิมเหลือ "urea" → จับ Urea ผิด)
+                alias = r"(?:(?<=\s)|^)\(([^()]{3,})\)(?=\s|$|[,;])"
+                np_ = re.sub(alias, "", p).strip(" ,")
+                if np_ and np_ != p:
                     alts.add(np_)
-                for inner in re.findall(r"\(([^()]{3,})\)", p):
+                for inner in re.findall(alias, p):
                     alts.add(inner.strip())
     return [a for a in alts if len(re.sub(r"[^A-Za-z]", "", a)) >= 3]
 

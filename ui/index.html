@@ -39,7 +39,7 @@ main{min-height:0;position:relative}
 .page.on{display:grid}
 #p1{grid-template-columns:minmax(0,1fr) 440px minmax(0,1fr)}
 #p2{grid-template-columns:minmax(0,1fr) 520px}
-#p3{grid-template-columns:minmax(0,1fr) 380px}
+#p3{grid-template-columns:minmax(0,1fr) 440px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
 .card>.hd{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);min-height:46px}
 .hd .t{font-weight:600}
@@ -60,6 +60,20 @@ main{min-height:0;position:relative}
 .box.all{background:rgba(74,222,128,.10)}
 .box.prob{background:rgba(251,191,36,.12);outline:1.5px dashed #FBBF24}
 .sum .sp{flex:1}
+.chat{padding:10px 14px}
+.qa-turn{margin-bottom:16px}
+.qa-q{margin-left:auto;max-width:80%;width:fit-content;background:#14283A;border:1px solid #24405A;border-radius:12px 12px 2px 12px;padding:8px 12px;margin-bottom:8px}
+.qa-a{max-width:94%}
+.qa-card{border:1px solid var(--line2);border-left-width:3px;border-radius:8px;padding:8px 12px;margin:6px 0;background:var(--panel2)}
+.qa-card.bad{border-left-color:var(--bad)}.qa-card.warn{border-left-color:var(--warn)}.qa-card.ok{border-left-color:var(--ok)}.qa-card.info{border-left-color:var(--info)}
+.qa-t{font-weight:600;margin-bottom:4px}.qa-l{font-size:12.5px;color:#C7CCD6;margin:2px 0;word-break:break-word}
+.qa-v{margin:6px 0;font-weight:600}.qa-v.bad{color:var(--bad)}.qa-v.ok{color:var(--ok)}
+.qa-r{margin-top:6px;font-size:12.5px}
+.uses tr.focus td{background:#2E2410;color:var(--warn)}
+.qa-ex{display:flex;flex-wrap:wrap;gap:5px;padding:6px 10px;border-top:1px solid var(--line);align-items:center}
+.qa-ex .chip{font-size:11.5px;padding:3px 9px}
+.sumdoc{padding:10px 12px;border-bottom:1px solid var(--line)}
+.sumdoc .t{font-weight:600}.sumdoc ul{margin:6px 0 6px 18px;padding:0;font-size:12.5px;line-height:1.55;color:#C7CCD6}
 .qbar{display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid var(--line)}
 .qbar input{flex:1;padding:6px 10px}
 .qbar button{padding:4px 10px}
@@ -143,7 +157,7 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
     <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9V3"/><path d="M7.5 15h9"/></svg>2NK <b>INCI Check</b></div>
     <button class="tab on" data-p="p1">ฉลาก ↔ สูตร</button>
     <button class="tab" data-p="p2">ตรวจสารห้ามใช้ อย.</button>
-    <button class="tab" data-p="p3">ฐานข้อมูล / อัปเดต</button>
+    <button class="tab" data-p="p3">ถาม-ตอบ / ฐานข้อมูล</button>
     <div class="sp"></div>
     <div class="net"><span class="dot" id="netDot"></span><span id="netTxt">กำลังเชื่อมต่อ…</span></div>
   </header>
@@ -205,10 +219,15 @@ footer{display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;
     <!-- ===== TAB 3 ===== -->
     <section class="page" id="p3">
       <div class="card">
-        <div class="sbar"><input id="q" placeholder="ค้นหาชื่อสาร หรือเลข CAS เช่น hydroquinone, 123-31-9, ไวท์เทนนิ่ง"><button id="btnQ">ค้นหา</button></div>
-        <div class="res" id="res3"><div class="empty">ค้นหาในฐานข้อมูลที่ตั้งค่าไว้ในโปรแกรม (จากเอกสาร อย. ที่ให้มา)</div></div>
+        <div class="hd"><span class="t">ถาม-ตอบจากเอกสาร อย.</span><span class="mini" style="flex:1">ตอบจากประกาศและหลักเกณฑ์จริง พร้อมหน้าอ้างอิง · ทำงานในเครื่อง ไม่ใช้ AI</span>
+          <button class="ghost" id="qaClear" title="ล้างประวัติคำถาม">ล้าง</button></div>
+        <div class="res chat" id="res3"></div>
+        <div class="qa-ex" id="qaEx"></div>
+        <div class="sbar"><input id="q" placeholder="พิมพ์คำถาม เช่น Salicylic acid ในแชมพูใช้ได้กี่ % · ใช้คำว่า Whitening ในชื่อได้ไหม" autocomplete="off"><button class="primary" id="btnQ">ถาม</button></div>
       </div>
       <div class="card">
+        <div class="hd"><span class="t">สรุปเอกสารในฐานข้อมูล</span></div>
+        <div class="res" style="flex:none;max-height:58%" id="sumDocs"></div>
         <div class="hd"><span class="t">ฐานข้อมูลที่ใช้ตรวจ</span></div>
         <div class="src" id="srcInfo"></div>
         <div class="hd"><span class="t">อัปเดต</span></div>
@@ -560,15 +579,39 @@ $('#mNext').onclick=()=>{if(MR&&MR.page<MR.pages){MR.page++;showRegPage()}};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#mClose').click()});
 
 /* ---------------- TAB 3 DB ---------------- */
-$('#btnQ').onclick=dbSearch;$('#q').onkeydown=e=>{if(e.key==='Enter')dbSearch()};
-async function dbSearch(){const r=await api.db_search($('#q').value);
-  $('#res3').innerHTML=r.length?r.map((x,i)=>{const e=x.entry;
-    if(x.kind==='banned')return `<div class="row" data-i="${i}"><div class="ic banned">!</div><div><div class="nm">${esc(e.name)}</div><div class="sub">วัตถุห้ามใช้ ลำดับ ${esc(e.no)} ${e.cas.length?'· CAS '+esc(e.cas.join(', ')):''}</div></div><div class="meta">หน้า ${e.page}</div></div>`;
-    if(x.kind==='restricted')return `<div class="row" data-i="${i}"><div class="ic restricted">⚠</div><div><div class="nm">${esc(e.chem)}</div><div class="sub">วัตถุที่อาจใช้ ลำดับ ${esc(e.no)} · ${esc(e.inci)} ${e.cas.length?'· CAS '+esc(e.cas.join(', ')):''}</div>
-      <table class="uses">${e.uses.map(u=>`<tr><td>${esc(u.area)}</td><td>${esc(u.max)}</td><td>${esc(u.cond)}</td></tr>`).join('')}</table></div><div class="meta">หน้า ${e.page}</div></div>`;
-    return `<div class="row" data-i="${i}"><div class="ic word">!</div><div><div class="nm">${esc(e.word)}</div><div class="sub">คำห้ามใช้ ลำดับ ${e.no}</div></div><div class="meta">หน้า ${e.page}</div></div>`}).join('')
-    :'<div class="empty">ไม่พบ</div>';
-  $$('#res3 .row').forEach(el=>el.onclick=()=>{const x=r[+el.dataset.i],e=x.entry;openReg(e.file,e.page,e.rect,e.no)})}
+// ถาม-ตอบ: ประวัติคำถามในหน้าต่างแบบแชต แต่ละคำตอบมีปุ่มเปิดหน้าเอกสารอ้างอิง
+const QA_EX=['Hydroquinone ใช้ได้ไหม','Salicylic acid ในแชมพูใช้ได้กี่ %','Climbazole 3% ในแชมพูเกินไหม','ใช้คำว่า Whitening ในชื่อได้ไหม',
+  'ชื่อสินค้า "Acne Treatment Gel" ได้ไหม','Alcohol ใช้ได้ไม่เกินกี่ %','ผลิตภัณฑ์สำหรับเด็กอายุต่ำกว่า 3 ปี ห้ามใช้สารอะไร','123-31-9'];
+const QA={refs:[],busy:false};
+$('#qaEx').innerHTML='<span class="mini">ตัวอย่าง:</span> '+QA_EX.map(q=>`<span class="chip" data-q="${esc(q)}">${esc(q)}</span>`).join('');
+$$('#qaEx .chip').forEach(c=>c.onclick=()=>{$('#q').value=c.dataset.q;askQ()});
+$('#btnQ').onclick=askQ;$('#q').onkeydown=e=>{if(e.key==='Enter')askQ()};
+$('#qaClear').onclick=()=>{QA.refs=[];$('#res3').innerHTML=qaWelcome()};
+function qaWelcome(){return `<div class="empty" style="text-align:left;max-width:560px;margin:auto">ถามเรื่องสารในเครื่องสำอางหรือการจดแจ้งได้เลย เช่น<br>
+  • สาร X ห้ามใช้ไหม / ใช้ได้สูงสุดกี่ % / ในผลิตภัณฑ์ประเภทไหน (พิมพ์ชื่อสารภาษาอังกฤษ หรือเลข CAS)<br>• ใส่ % มาด้วย โปรแกรมจะบอกว่าเกินกำหนดไหม<br>
+  • คำนี้ใช้ในชื่อสินค้าได้ไหม (ใส่ชื่อในเครื่องหมายคำพูด)<br>• คำถามทั่วไป เช่น ต้องแนบเอกสารอะไร, สารห้ามใช้ในเด็ก<br>
+  <span class="mini">คำตอบมาจากเอกสารในฐานข้อมูลเท่านั้น — กดลิงก์ใต้คำตอบเพื่อเปิดหน้าประกาศจริงตรวจซ้ำ</span></div>`}
+$('#res3').innerHTML=qaWelcome();
+async function askQ(){const q=$('#q').value.trim();if(!q||QA.busy)return;QA.busy=true;$('#btnQ').disabled=true;
+  const box=$('#res3');if(box.querySelector('.empty'))box.innerHTML='';
+  const wrap=document.createElement('div');wrap.className='qa-turn';wrap.innerHTML=`<div class="qa-q">${esc(q)}</div><div class="qa-a"><span class="mini">กำลังค้นในเอกสาร…</span></div>`;
+  box.appendChild(wrap);wrap.scrollIntoView({block:'start',behavior:'smooth'});
+  try{const r=await api.ask(q);$('.qa-a',wrap).innerHTML=r.ok?qaHtml(r.answers):'<span style="color:var(--bad)">'+esc(r.error)+'</span>';
+    $$('[data-ref]',wrap).forEach(a=>a.onclick=()=>{const f=QA.refs[+a.dataset.ref];openReg(f.file,f.page,f.rect,'')})}
+  finally{QA.busy=false;$('#btnQ').disabled=false;$('#q').value='';$('#q').focus()}}
+function qaHtml(ans){const cls={bad:'bad',warn:'warn',ok:'ok',info:'info',passage:'mut',note:'mut',none:'mut'};
+  return ans.map(a=>{let h=`<div class="qa-card ${a.type}">`;
+    if(a.type==='note'){return `<div class="mini" style="margin:8px 2px 2px">${esc(a.title)}</div>`}
+    h+=`<div class="qa-t"><span class="tag ${cls[a.type]||'mut'}">${{bad:'ห้าม/ไม่ผ่าน',warn:'มีเงื่อนไข',ok:'ไม่พบข้อห้าม',info:'ข้อมูล',passage:'จากเอกสาร',none:'ไม่พบ'}[a.type]||''}</span> ${esc(a.title)}</div>`;
+    (a.lines||[]).forEach(l=>h+=`<div class="qa-l">${esc(l)}</div>`);
+    if(a.verdict)h+=`<div class="qa-v ${a.verdict_bad?'bad':'ok'}">${esc(a.verdict)}</div>`;
+    if(a.uses&&a.uses.length)h+=`<table class="uses"><tr><th>บริเวณที่ใช้ / ประเภทผลิตภัณฑ์</th><th>สูงสุด</th><th>เงื่อนไข</th></tr>${a.uses.map((u,i)=>`<tr class="${a.focus&&a.focus.includes(i)?'focus':''}"><td>${esc(u.area)}</td><td>${esc(u.max)}</td><td>${esc(u.cond)}</td></tr>`).join('')}</table>${a.src?`<div class="mini">${esc(a.src)}</div>`:''}`;
+    if(a.refs&&a.refs.length)h+=`<div class="qa-r">`+a.refs.map(f=>{QA.refs.push(f);return `<a class="lk" data-ref="${QA.refs.length-1}">📄 ${esc(f.label)}</a>`}).join(' · ')+`</div>`;
+    return h+'</div>'}).join('')}
+async function loadSummaries(){const s=await api.summaries();
+  $('#sumDocs').innerHTML=s.map((d,i)=>`<div class="sumdoc"><div class="t">${esc(d.title)}</div><div class="mini">${esc(d.sub)}</div>
+    <ul>${d.points.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><a class="lk" data-sd="${i}">📄 เปิดเอกสาร</a></div>`).join('');
+  $$('#sumDocs [data-sd]').forEach(a=>a.onclick=()=>{const d=s[+a.dataset.sd];openReg(d.file,d.page,null,'')})}
 async function refreshInfo(){const i=await api.info();$('#ver').textContent='โปรแกรม v'+i.version;$('#dbv').textContent='ฐานข้อมูล '+i.db_version;
   $('#srcInfo').innerHTML=`<div>วัตถุห้ามใช้ <b>${i.counts.banned}</b> รายการ · วัตถุที่อาจใช้ <b>${i.counts.restricted}</b> รายการ · คำห้ามใช้ <b>${i.counts.words}</b> คำ</div>`+
     Object.values(i.sources).map(s=>`<div class="mini">• ${esc(s)}</div>`).join('')+`<div class="mini" style="margin-top:6px">ชื่อสารสากล: CosIng (European Commission) — ค้นออนไลน์ เก็บผลไว้ในเครื่อง 30 วัน</div><div class="mini">ฐานข้อมูลเวอร์ชัน ${esc(i.db_version)}</div>`}
@@ -675,7 +718,7 @@ $('#btnExp2').onclick=async()=>{const r=S.reg;const rows=r.items.map(it=>({level
   const res=await api.export_report('reg',{rows,words},V.reg.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
 
 /* ---------------- start ---------------- */
-window.addEventListener('pywebviewready',async()=>{api=window.pywebview.api;refreshInfo();checkUpd();
+window.addEventListener('pywebviewready',async()=>{api=window.pywebview.api;refreshInfo();checkUpd();loadSummaries();
   setTimeout(()=>{if(S.online==null){api.cosing('GLYCERIN').then(c=>{S.online=c.status!=='error';setNet()})}},1500)});
 </script>
 </body>

@@ -21,6 +21,7 @@ class Api:
         self._cosing = core.CosIng()
         self._lock = threading.Lock()
         self._seq = {}
+        self._qa = None
 
     # ------------------------------------------------ helpers
     def _js(self, fn, *args):
@@ -175,6 +176,20 @@ class Api:
                         "title": self._reg.db.get("sources", {}).get(fn, fn)}
         return {"ok": False, "error": "ไม่พบไฟล์ประกาศ " + fn}
 
+    def ask(self, q):
+        try:
+            if self._qa is None:
+                import qa
+                self._qa = qa.QA(self._reg)
+            return dict(self._qa.ask(q), ok=True)
+        except Exception as e:
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
+
+    def summaries(self):
+        import qa
+        return qa.summaries(self._reg.db)
+
     def db_search(self, q):
         q = (q or "").strip()
         if len(q) < 2:
@@ -289,6 +304,11 @@ def main():
                 res["summary"] = c.get("summary")
                 res["reg"] = api.load("reg", a[1]).get("reg", {}).get("summary")
                 res["cosing"] = api.cosing("PHENOXYETHANOL").get("status")
+                qa1 = api.ask("Climbazole 3% ในแชมพูเกินไหม")
+                qa2 = api.ask("ต้องแนบเอกสารอะไรบ้างตอนจดแจ้ง")
+                res["qa"] = [a.get("verdict") for a in qa1.get("answers", []) if a.get("verdict")] + \
+                            [a["title"] for a in qa2.get("answers", []) if a.get("type") == "passage"][:1]
+                res["summaries"] = len(api.summaries())
             except Exception as e:
                 res["error"] = repr(e)
             with open(out, "w", encoding="utf-8") as f:

@@ -1,8 +1,8 @@
 {
-  "app": "1.1.2",
-  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.1.2/2NK-INCI-Check.exe",
-  "db": "2026-11-20",
+  "app": "1.2.0",
+  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.2.0/2NK-INCI-Check.exe",
+  "db": "2026-11-23",
   "db_url": "https://raw.githubusercontent.com/chanagundpt/inci-check/main/data/regdb.json",
   "files": {},
-  "notes": "v1.1.2: ช่องค้นหาสาร, ปุ่มล้าง/รีเฟรช, แก้ผลเก่าค้างเมื่อเปิดไฟล์ใหม่ซ้อน"
+  "notes": "v1.2.0: ถาม-ตอบจากเอกสาร อย. (ออฟไลน์), สรุปเอกสาร, แก้ Urea ถูกจับเป็นสารห้ามใช้ผิด"
 }
