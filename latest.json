@@ -1,8 +1,8 @@
 {
-  "app": "1.2.5",
-  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.2.5/2NK-INCI-Check.exe",
+  "app": "1.2.6",
+  "app_url": "https://github.com/chanagundpt/inci-check/releases/download/v1.2.6/2NK-INCI-Check.exe",
   "db": "2026-11-23.2",
   "db_url": "https://raw.githubusercontent.com/chanagundpt/inci-check/main/data/regdb.json",
   "files": {},
-  "notes": "v1.2.5: อ่านชื่อผู้ผลิต/โรงงานและที่อยู่จากไฟล์ พร้อมแปลเป็นอังกฤษ (ญี่ปุ่น จีน เกาหลี), อ่านอักษรเกาหลีจากรูปได้"
+  "notes": "v1.2.6: อ่านที่อยู่ผู้ผลิตบนฉลากได้ครบขึ้น (บรรทัดใต้ชื่อ) และชื่อบริษัทที่ไม่มีคำนำหน้า"
 }

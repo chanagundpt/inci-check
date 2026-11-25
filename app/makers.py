@@ -5,7 +5,8 @@ import json, os, re, threading, time, unicodedata
 import core
 
 ROLE_TH = {"mfr": "ผู้ผลิต", "factory": "โรงงานผลิต", "dist": "ผู้จัดจำหน่าย / เจ้าของแบรนด์",
-           "applicant": "บริษัทที่ระบุในเอกสาร"}
+           "applicant": "บริษัทที่ระบุในเอกสาร",
+           "company": "บริษัทบนฉลาก (ไม่ได้ระบุว่าเป็นผู้ผลิตหรือผู้จัดจำหน่าย)"}
 
 # (role, คำนำหน้า) — ภาษาละติน
 LATIN = [
@@ -156,10 +157,52 @@ def _is_latin(s):
     return bool(re.search(r"[A-Za-z]{3}", s)) and not re.search(r"[぀-ヿ一-鿿가-힯฀-๿]", s)
 
 
+def _below(L, ni, skip, mk, name, addr_lines, used=None):
+    """ฉลากหลายคอลัมน์: บรรทัดถัดไปตามลำดับอ่านอาจเป็นของคอลัมน์อื่น → หาชื่ออังกฤษ/ที่อยู่จากตำแหน่งจริง (บรรทัดใต้ชื่อโดยตรง)"""
+    nl = L[ni]
+    if mk["address"] or not nl.get("box"):
+        return addr_lines
+    nb = nl["box"]
+    nh = max(1e-3, nb[3] - nb[1])
+    below = []
+    for q, c in enumerate(L):
+        cb = c.get("box")
+        if not cb or c["page"] != nl["page"] or q in skip:
+            continue
+        gap = cb[1] - nb[3]
+        ov = min(nb[2], cb[2]) - max(nb[0], cb[0])
+        if -0.3 * nh <= gap <= 3.2 * nh and ov > 0.25 * min(nb[2] - nb[0], cb[2] - cb[0]):
+            below.append((gap, q))
+    last_y = nb[3]
+    for gap, q in sorted(below)[:4]:
+        c = L[q]
+        tc = _clean(c["text"])
+        if _label(c["text"]) or STOP_RE.match(c["text"]):
+            break
+        if not mk["name_en"] and not _is_latin(name) and _is_latin(tc) and COMPANY_HINT.search(tc) and len(tc) < 90 and not mk["address"]:
+            mk["name_en"] = tc
+            mk["marks"] += c["marks"]
+            last_y = c["box"][3]
+            if used is not None:
+                used.add(q)
+            continue
+        if _addr_like(tc) and len(tc) < 160 and c["box"][1] - last_y <= 1.8 * nh and addr_lines < 2:
+            mk["address"] = (mk["address"] + " " + tc).strip()
+            mk["addr_marks"] += c["marks"]
+            addr_lines += 1
+            last_y = c["box"][3]
+            if used is not None:
+                used.add(q)
+            continue
+        if mk["address"]:
+            break
+    return addr_lines
+
+
 def extract_makers(doc):
     L = _lines(doc)
     doc_ja = any(re.search(r"[぀-ヿ]", l["text"]) for l in L)
-    out, seen = [], {}
+    out, seen, used = [], {}, set()
     i = 0
     while i < len(L):
         lab = _label(L[i]["text"])
@@ -225,6 +268,7 @@ def extract_makers(doc):
                 k += 1
                 continue
             break
+        addr_lines = _below(L, j - 1, {i, j - 1}, mk, name, addr_lines, used)
         # ไม่มีที่อยู่ต่อท้าย → ดูหัวกระดาษ 4 บรรทัดก่อนหน้า (ติดป้ายให้ตรวจ)
         if not mk["address"] and role in ("mfr", "factory"):
             for b in range(i - 1, max(-1, i - 5), -1):
@@ -245,12 +289,36 @@ def extract_makers(doc):
             # เจอซ้ำ (เช่น หน้าปก + หน้าใน) → ใช้ฉบับที่อ่านได้ครบกว่า
             prev.update({k2: mk[k2] for k2 in ("name", "name_en", "address", "marks", "addr_marks")})
             prev["addr_guess"] = mk.get("addr_guess", False)
+        used.update(range(i, max(k, i + 1)))
         i = max(k, i + 1)
+    # ชื่อบริษัทที่ไม่มีคำนำหน้า (เช่น ฉลากญี่ปุ่นเขียน "株式会社○○" แล้วตามด้วยที่อยู่) — รับเฉพาะเมื่อมีที่อยู่อยู่ใต้ชื่อ
+    for q, l in enumerate(L):
+        if q in used or not l.get("box"):
+            continue
+        t = _clean(l["text"])
+        if len(t) > 40 or _label(l["text"]) or STOP_RE.match(l["text"]) or _addr_like(t):
+            continue
+        if not (re.match(r"^.{0,22}(?:株式会社|有限会社|合同会社|有限公司|股份有限公司|주식회사|\(주\)|㈜|㈱).{0,22}$", t)
+                or (_is_latin(t) and re.search(r"(?:co\.?,?\s*ltd|ltd|inc|corp|corporation|limited)\.?$", t, re.I))):
+            continue
+        mk = {"role": "company", "role_th": ROLE_TH["company"], "name": t, "name_en": "", "address": "", "marks": list(l["marks"]),
+              "addr_marks": [], "label": ""}
+        loc = set()
+        _below(L, q, {q}, mk, t, 0, loc)
+        if not mk["address"]:
+            continue
+        if l["page"] in getattr(doc, "ocr_pages", []):
+            mk["address"] = _fix_ocr_addr(mk["address"])
+        key = core.norm_latin(t) or t
+        if any((core.norm_latin(m["name"]) or m["name"]) == key or (m["name_en"] and core.norm_latin(m["name_en"]) == core.norm_latin(t)) for m in out):
+            continue
+        used |= loc | {q}
+        out.append(mk)
     for mk in out:
         mk["lang"] = _lang(mk["name"] + " " + mk["address"], doc_ja)
         mk["need_tr"] = ([mk["name"]] if not _is_latin(mk["name"]) and not mk["name_en"] else []) + \
                         ([mk["address"]] if mk["address"] and not _is_latin(mk["address"]) else [])
-    order = {"mfr": 0, "factory": 1, "dist": 2, "applicant": 3}
+    order = {"mfr": 0, "factory": 1, "dist": 2, "applicant": 3, "company": 4}
     out.sort(key=lambda m: order[m["role"]])
     return out
 
