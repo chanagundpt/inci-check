@@ -124,6 +124,8 @@ table.xt td.bad{background:#FECACA}
 .cmain{margin-top:5px;font-size:12.5px;line-height:1.45}.cmain div{padding-left:14px;text-indent:-14px}
 .cmain .reg{color:var(--warn)}.cmain .reg.b{color:var(--bad)}.cmain .lim{color:var(--muted)}.cmain .ok2{color:var(--muted)}
 .det-sum{border:1px solid var(--line2);border-left:3px solid var(--warn);border-radius:8px;padding:8px 10px;margin:8px 0;background:var(--panel)}.det-sum .t{font-weight:600;margin-bottom:4px}
+.mkr .orig{font-size:12px;color:var(--muted);margin-top:1px}.mkr .ad{font-size:12.5px;margin-top:4px;line-height:1.45}.mkr .ad b{color:var(--muted);font-weight:500}
+.mkcmp{padding:8px 12px;font-size:12.5px;border-bottom:1px solid var(--line)}.mkcmp.ok{color:var(--ok)}.mkcmp.warn{color:var(--warn)}
 .cnd{display:block!important;padding:9px 12px!important;border-left:3px solid var(--warn)}.cnd.bad{border-left-color:var(--bad)}.cnd.info{border-left-color:var(--info)}
 .cnd .ct{font-weight:600;margin-bottom:3px}.cnd .cl.on{color:var(--text);font-weight:600}.cnd .cl{font-size:12px;color:var(--muted);margin:2px 0}.cnd .cl.b{color:var(--bad)}
 .cchip{display:inline-block;font-size:12px;padding:1px 8px;margin:3px 4px 0 0;border-radius:10px;background:#1C2029;border:1px solid var(--line2);cursor:pointer;color:var(--text)}.cchip:hover{border-color:#4FB3FF}
@@ -378,6 +380,7 @@ $('#btnRef2').onclick=async()=>{if(!S.paths.reg){toast('ยังไม่ได
 // เลขลำดับการโหลดต่อช่อง: เปิดไฟล์ใหม่ซ้อนระหว่างไฟล์เดิมยังอ่านไม่เสร็จ → ผลของไฟล์เก่าที่มาทีหลังจะถูกทิ้ง
 const LOADSEQ={label:0,formula:0,reg:0};
 function resetResults(slot){
+  S.mk[slot]=[];
   if(slot==='reg'){S.reg=null;S.sel2=null;$('#sum2').innerHTML='';$('#det2').classList.remove('on');
     $('#res2').innerHTML='<div class="empty">กำลังอ่านไฟล์…</div>';['#btnCos','#btnExp2','#btnRep2'].forEach(s=>$(s).disabled=true);return}
   S.cmp=null;S.sel1=null;$('#sum1').innerHTML='';$('#det1').classList.remove('on');
@@ -392,6 +395,7 @@ async function loadFile(slot,path,b64name,b64){
   if(!r.ok){toast(r.error||'เปิดไฟล์ไม่ได้',true);$(slot==='reg'?'#res2':'#res1').innerHTML='<div class="empty">เปิดไฟล์ไม่ได้</div>';return}
   S.paths[slot]=r.path;
   v.set(r.view);
+  S.mk[slot]=r.makers||[];trMakers(slot);
   if(r.warn)toast(r.warn,true);
   if(slot==='label'){S.label=r.label;if(!r.label.items.length)toast(r.label.error||'ไม่พบรายการส่วนประกอบบนฉลาก',true);
     const all=r.label.items.flatMap(i=>i.marks);V.label.mark(all,'soft',false);if(all.length)V.label.fitBlock(all);S.cmp=null}
@@ -450,9 +454,11 @@ function renderCmp(){const r=S.cmp;if(!r)return;const s=r.summary;S.sort1=S.sort
   }else{const pr={missing:0,extra:1,check:2,near:3,ok:4};
     list.sort((a,b)=>(pr[a[0].status]-pr[b[0].status])||((a[0].f??999)-(b[0].f??999)));
     html=list.map(([x,i])=>cmpRowHtml(x,i,S.sel1===i)).join('')}
+  if(f==='all')html=mkGroupHtml(['label','formula'],true,S.q1)+mkCompareHtml()+html;
   $('#res1').innerHTML=html||`<div class="empty">${S.q1?'ไม่พบสารที่ตรงกับ “'+esc(S.q1)+'”':'ไม่มีรายการในกลุ่มนี้'}</div>`;
   if(S.q1)qMark('#res1',S.q1);
-  $$('#res1 .row').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover1(i);el.onclick=()=>{if(togglePanel('#det1',i,S.sel1)){S.sel1=null;el.classList.remove('sel');return}select1(i)}});
+  mkBind('#res1');
+  $$('#res1 .row[data-i]').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover1(i);el.onclick=()=>{if(togglePanel('#det1',i,S.sel1)){S.sel1=null;el.classList.remove('sel');return}select1(i)}});
   $('#res1').onmouseleave=()=>{if(S.sel1!=null)hover1(S.sel1,false);else{V.label.clear('hl');V.formula.clear('hl');V.label.clear('bad')}};
 }
 function fmtPct(p){if(p>=1)return p.toFixed(2)+'%';if(p<=0)return '0%';const d=Math.min(10,Math.max(2,1-Math.floor(Math.log10(p))));return p.toFixed(d).replace(/0+$/,'')+'%'}
@@ -559,6 +565,50 @@ function mainCondHtml(it,max=5){const m=mainConds(it);if(!m.length)return '';
 function togglePanel(det,key,cur){if(cur===key&&$(det).classList.contains('on')){$(det).classList.remove('on');$(det).innerHTML='';return true}return false}
 function condTags(it){return (it.propellant?'<span class="tag warn">ก๊าซขับดัน</span>':'')+(it.conds||[]).map(k=>`<span class="tag ${k==='purpose'||k==='amount'?'info':'warn'}">${esc(COND[k]?COND[k][1]:k)}</span>`).join('')}
 function banTag(hh){return hh.conditional?`<span class="tag warn">ห้ามใช้ถ้ามีสิ่งเจือปน ลำดับ ${hh.entry.no}</span>`:`<span class="tag bad">ห้ามใช้ ลำดับ ${hh.entry.no}${hh.entry.superseded?' (ฉบับเดิม)':''}</span>`}
+/* ---------------- ผู้ผลิต / โรงงาน / ที่อยู่ (อ่านจากไฟล์ + แปลเป็นอังกฤษ) ---------------- */
+S.mk={label:[],formula:[],reg:[]};
+const MK_SLOT={label:'ฉลาก',formula:'สูตร',reg:'ไฟล์ที่ตรวจ'};
+function mkName(m){return m.name_en||m.name_tr||m.name}
+function mkAddr(m){return m.addr_tr||m.address||''}
+async function trMakers(slot){const list=S.mk[slot]||[],jobs=[];
+  list.forEach(m=>{(m.need_tr||[]).forEach(t=>jobs.push({m,text:t,lang:m.lang}))});
+  if(!jobs.length)return;list.forEach(m=>{if((m.need_tr||[]).length)m.tr_state='wait'});rerenderMk(slot);
+  let res=null;try{res=await api.translate(jobs.map(j=>({text:j.text,lang:j.lang})))}catch(e){}
+  if(S.mk[slot]!==list)return;
+  jobs.forEach((j,k)=>{const r=res&&res.ok&&res.res[k];const m=j.m;
+    if(r&&r.en){if(j.text===m.name){m.name_tr=r.en}else{m.addr_tr=r.en}m.tr_by=r.by;m.tr_state='ok'}
+    else if(m.tr_state!=='ok')m.tr_state='fail'});
+  rerenderMk(slot)}
+function rerenderMk(slot){if(slot==='reg'){if(S.reg)renderRegLight()}else if(S.cmp)renderCmp()}
+function mkRowHtml(m,slot,i,live){const nonLatin=(m.need_tr||[]).includes(m.name)||(!!m.name_en&&m.name_en!==m.name);
+  const tags=[];
+  if(m.name_en)tags.push('<span class="tag ok">ชื่ออังกฤษจากเอกสาร</span>');
+  if(m.tr_state==='ok')tags.push(`<span class="tag info">แปลอัตโนมัติ (${esc(m.tr_by||'')})${m.name_tr?' — ชื่อบริษัทอาจไม่ตรงชื่อทางการ':''} ตรวจกับเอกสารอีกครั้ง</span>`);
+  if(m.tr_state==='wait')tags.push('<span class="tag mut">กำลังแปล…</span>');
+  if(m.tr_state==='fail')tags.push('<span class="tag near">แปลไม่ได้ (ต้องต่ออินเทอร์เน็ต)</span>');
+  if(m.addr_guess)tags.push('<span class="tag warn">ที่อยู่จากหัวกระดาษ — โปรดตรวจ</span>');
+  if(!m.address)tags.push('<span class="tag mut">ไม่พบที่อยู่ในไฟล์</span>');
+  const a=mkAddr(m);
+  return `<div class="row mkr" data-s="makers" data-mk="${slot}:${i}"><div class="ic guide">🏭</div><div>
+    <div class="nm">${esc(mkName(m))}</div><div class="sub">${esc(m.role_th)}${m.label?' · ในเอกสารเขียนว่า “'+esc(m.label)+'”':''}</div>
+    ${nonLatin?`<div class="orig">ต้นฉบับ: <span class="jp">${esc(m.name)}</span></div>`:''}
+    ${a?`<div class="ad"><b>ที่อยู่:</b> ${esc(a)}</div>`:''}${m.addr_tr?`<div class="orig">ต้นฉบับ: <span class="jp">${esc(m.address)}</span></div>`:''}
+    ${tags.join('')}${live?` <a class="lk" data-mkcp="${slot}:${i}">คัดลอก</a>`:''}</div><div class="meta">${esc(MK_SLOT[slot])}</div></div>`}
+function mkGroupHtml(slots,live,q){let h='',n=0;
+  for(const sl of slots){(S.mk[sl]||[]).forEach((m,i)=>{if(q&&!qHit(q,[m.name,m.name_en,m.name_tr,m.address,m.addr_tr,m.role_th]))return;h+=mkRowHtml(m,sl,i,live);n++})}
+  return n?`<div class="grp">ผู้ผลิต / โรงงาน / ที่อยู่ (${n})</div>`+h:''}
+function mkKey(m){return (mkName(m)||'').toLowerCase().replace(/\b(co|ltd|inc|corp|corporation|company|limited|kabushiki|kaisha|plant|factory)\b\.?/g,'').replace(/[^a-z0-9฀-鿿가-힯]+/g,'')}
+function mkCompareHtml(){const a=S.mk.label||[],b=S.mk.formula||[];if(!a.length||!b.length)return '';
+  if(a.concat(b).some(m=>m.tr_state==='wait'))return '';
+  const hit=[];a.forEach(x=>b.forEach(y=>{const k1=mkKey(x),k2=mkKey(y);if(k1.length>=4&&k2.length>=4&&(k1===k2||k1.includes(k2)||k2.includes(k1)))hit.push(mkName(y))}));
+  return hit.length?`<div class="mkcmp ok">✓ ชื่อบริษัทบนฉลากตรงกับในสูตร: ${esc([...new Set(hit)].join(', '))}</div>`
+    :`<div class="mkcmp warn">⚠ ชื่อบริษัทบนฉลากกับในไฟล์สูตรไม่ตรงกัน — ตรวจว่าเป็นผู้ผลิต/โรงงานเดียวกันหรือไม่</div>`}
+function mkBind(root){$$(root+' .row[data-mk]').forEach(el=>{const [sl,i]=el.dataset.mk.split(':'),m=S.mk[sl][+i];
+    el.onmouseenter=()=>V[sl].mark([...(m.marks||[]),...(m.addr_marks||[])],'hl');
+    el.onclick=e=>{if(e.target.closest('[data-mkcp]'))return;V[sl].focusMarks([...(m.marks||[]),...(m.addr_marks||[])])}});
+  $$(root+' [data-mkcp]').forEach(a=>a.onclick=async e=>{e.stopPropagation();const [sl,i]=a.dataset.mkcp.split(':'),m=S.mk[sl][+i];
+    const txt=mkName(m)+(mkAddr(m)?'\n'+mkAddr(m):'');try{await navigator.clipboard.writeText(txt)}catch(_){const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove()}
+    toast('คัดลอกชื่อและที่อยู่แล้ว')})}
 function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
   $('#regHint').textContent=(r.mode==='formula'?'อ่านจากตารางสูตร':'อ่านจากรายการส่วนประกอบบนฉลาก')+` · ${r.items.length} รายการ`;
   $('#btnCos').disabled=false;$('#btnExp2').disabled=false;$('#btnRep2').disabled=false;
@@ -570,6 +620,7 @@ function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
   const f=S.f2;let h='';
   const order=['banned','restricted','guide','ok'];
   S.cards=condCards(r);
+  if(f==='all')h+=mkGroupHtml(['reg'],true,S.q2);
   if((f==='all'||f==='conds')&&S.cards.length){const cs=S.cards.map((c,j)=>[c,j]).filter(([c])=>qHit(S.q2,[c.title,...c.lines,...c.items.map(i=>r.items[i].name)]));
     if(cs.length)h+=`<div class="grp">เงื่อนไขที่ต้องระบุตอนจดแจ้ง (${cs.length})</div>`+cs.map(([c,j])=>condCardHtml(r,c,j,true)).join('')}
   const wl=r.words.map((w,i)=>[w,i]).filter(([w])=>qHit(S.q2,[w.found,w.line,w.word.word]));
@@ -589,6 +640,7 @@ function renderReg(){const r=S.reg;if(!r)return;const s=r.summary;
         <div class="meta">${it.cas.length?esc(it.cas[0]):''}${it.pct!=null?'<br>'+fmtPct(it.pct):''}</div></div>`}).join('')}
   $('#res2').innerHTML=h||`<div class="empty">${S.q2?'ไม่พบสารที่ตรงกับ “'+esc(S.q2)+'”':'ไม่มีรายการในกลุ่มนี้'}</div>`;
   if(S.q2)qMark('#res2',S.q2);
+  mkBind('#res2');
   $$('#res2 .row[data-i]').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hover2(i);el.onclick=()=>{if(togglePanel('#det2',i,S.sel2)){S.sel2=null;el.classList.remove('sel');return}select2(i)}});
   $$('#res2 .row[data-c]').forEach(el=>{const c=S.cards[+el.dataset.c];el.onmouseenter=()=>V.reg.mark(c.items.flatMap(i=>r.items[i].marks),c.cls==='bad'?'bad':'warn');el.onclick=e=>{if(e.target.closest('.cchip,[data-cp]'))return;const k='c'+el.dataset.c;if(togglePanel('#det2',k,S.sel2)){S.sel2=null;el.classList.remove('sel');return}selectCond(+el.dataset.c)}});
   $$('#res2 .cchip').forEach(el=>{const i=+el.dataset.ci;el.onmouseenter=e=>{e.stopPropagation();hover2(i)};el.onmouseleave=()=>{const c=S.cards[+el.closest('[data-c]').dataset.c];V.reg.mark(c.items.flatMap(k=>r.items[k].marks),c.cls==='bad'?'bad':'warn',false)};el.onclick=()=>select2(i)});
@@ -757,7 +809,7 @@ const V={};document.querySelectorAll('[data-viewer]').forEach(c=>{V[c.dataset.vi
 window.addEventListener('resize',()=>Object.values(V).forEach(v=>{if(v.view&&v.view.kind!=='table')v.pg.forEach(p=>{const w=v.fitW()*v.zoom;p.el.style.width=w+'px';p.el.style.height=(w*p.h/p.w)+'px'})}));
 Object.entries(D.persist||{}).forEach(([k,[m,c]])=>V[k]&&V[k].mark(m,c,false));
 let sel=null;const hov=i=>{const r=D.rows[i];Object.entries(r.m).forEach(([k,[m,c]])=>V[k]&&V[k].mark(m,c,true))};
-document.querySelectorAll('#res .row').forEach(el=>{const i=+el.dataset.i;el.onmouseenter=()=>hov(i);
+document.querySelectorAll('#res .row').forEach(el=>{const i=el.dataset.i;if(i==null)return;el.onmouseenter=()=>hov(i);
   el.onclick=()=>{const d=document.getElementById('det');if(sel===i&&d.classList.contains('on')){sel=null;el.classList.remove('sel');d.classList.remove('on');d.innerHTML='';return}
     sel=i;document.querySelectorAll('#res .row').forEach(e=>e.classList.toggle('sel',e===el));hov(i);d.classList.add('on');d.innerHTML=D.rows[i].d}});
 document.querySelectorAll('#sum .chip').forEach(c=>c.onclick=()=>{const k=c.dataset.k;document.querySelectorAll('#sum .chip').forEach(x=>x.classList.toggle('on',x===c));
@@ -769,7 +821,7 @@ function buildReport(kind){const css=document.querySelector('style').textContent
     const all=r.results.map((x,i)=>[x,i]);const [lab,rest]=cmpOrder(all);const prev=S.sort1;S.sort1='label';
     const row=([x,i])=>{const [lm,fm]=marks1(x);rows[i]={m:{label:[lm,x.status==='extra'?'warn':'hl'],formula:[fm,x.status==='missing'?'bad':'hl']},d:cmpDetailHtml(x)};
       return cmpRowHtml(x,i,false).replace('<div class="row ',`<div data-s="${x.status==='check'?'near':x.status}${x.order_warn?' order':''}" class="row `)};
-    listHtml=(lab.length?`<div class="grp">ตามลำดับบนฉลาก (${lab.length})</div>`+lab.map(row).join(''):'')+(rest.length?`<div class="grp">มีในสูตร แต่ไม่พบบนฉลาก (${rest.length})</div>`+rest.map(row).join(''):'');S.sort1=prev;
+    listHtml=mkReport(['label','formula'],rows)+mkCompareHtml()+(lab.length?`<div class="grp">ตามลำดับบนฉลาก (${lab.length})</div>`+lab.map(row).join(''):'')+(rest.length?`<div class="grp">มีในสูตร แต่ไม่พบบนฉลาก (${rest.length})</div>`+rest.map(row).join(''):'');S.sort1=prev;
     persist.label=[r.results.filter(x=>x.l!=null&&x.status!=='ok').flatMap(x=>r.items[x.l].marks),'prob'];
     if(V.label.view.kind!=='table')rows.__fit={label:r.items.flatMap(i=>i.marks)};
     sumHtml=[['all','ทั้งหมด',r.results.length,''],['ok','ตรงกัน',s.ok,'ok'],['near','สะกดต่าง',s.near+s.check,'near'],['missing','ไม่มีบนฉลาก',s.missing,'bad'],['extra','อ่านไม่ได้/ไม่มีในสูตร',s.extra,'warn'],['order','ลำดับ',s.order,'info']]
@@ -777,6 +829,7 @@ function buildReport(kind){const css=document.querySelector('style').textContent
     cols=`<div class="card" data-viewer="label">${vwHtml('ฉลาก',V.label.view)}</div><div class="card">${'<div class="sum" id="sum">'+sumHtml+'</div><div class="res" id="res">'+listHtml+'</div><div class="detail" id="det"></div>'}</div><div class="card" data-viewer="formula">${vwHtml('สูตร',V.formula.view)}</div>`;
   }else{const r=S.reg,s=r.summary;title='ผลตรวจสารห้ามใช้ อย.';views={reg:V.reg.view};sub=`ไฟล์: ${esc(V.reg.view.name)}`;
     const order=['banned','restricted','guide','ok'];const cards=condCards(r);
+    listHtml+=mkReport(['reg'],rows);
     if(cards.length)listHtml+=`<div class="grp">เงื่อนไขที่ต้องระบุตอนจดแจ้ง (${cards.length})</div>`+cards.map((c,j)=>{rows['c'+j]={m:{reg:[c.items.flatMap(i=>r.items[i].marks),c.cls==='bad'?'bad':'warn']},
       d:`<h4>${esc(c.title)}</h4>`+c.lines.map(l=>`<div class="sub">${esc(l.replace(/^!/,''))}</div>`).join('')+`<div class="sub">สาร: ${esc(c.items.map(i=>r.items[i].name).join(', '))}</div>`};
       return condCardHtml(r,c,j,false).replace('data-c="'+j+'"','data-i="c'+j+'"')}).join('');
@@ -799,6 +852,11 @@ function buildReport(kind){const css=document.querySelector('style').textContent
 <script>const D=${data};<\/script><script>const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 ${Viewer.toString()}
 ${REPORT_JS}<\/script></body></html>`}
+function mkReport(slots,rows){let h='',n=0;
+  for(const sl of slots)(S.mk[sl]||[]).forEach((m,i)=>{const id='m'+sl+i;rows[id]={m:{[sl]:[[...(m.marks||[]),...(m.addr_marks||[])],'hl']},
+      d:`<h4>${esc(mkName(m))}</h4><div class="sub">${esc(m.role_th)}</div>${mkAddr(m)?`<div class="sub">ที่อยู่: ${esc(mkAddr(m))}</div>`:''}${m.name_tr||m.addr_tr||m.name_en?`<div class="sub">ต้นฉบับ: ${esc(m.name)} ${esc(m.addr_tr?m.address:'')}</div>`:''}`};
+    h+=mkRowHtml(m,sl,i,false).replace('data-mk="'+sl+':'+i+'"','data-i="'+id+'"');n++});
+  return n?`<div class="grp">ผู้ผลิต / โรงงาน / ที่อยู่ (${n})</div>`+h:''}
 function vwHtml(t,view){return `<div class="hd"><span class="t">${t}</span><span class="f" data-f></span><div class="zoom"><button class="ghost" data-z="-">−</button><button class="ghost" data-z="fit">พอดี</button><button class="ghost" data-z="+">+</button></div></div><div class="vw"><div class="pages"></div><div class="busy"><div class="spin"></div><div data-msg></div></div></div>`}
 async function saveReport(kind){try{const html=buildReport(kind);const base=kind==='cmp'?V.label.view.name:V.reg.view.name;
   const res=await api.save_html('รายงานผลตรวจ '+base.replace(/\.[^.]+$/,'')+'.html',html);
@@ -807,9 +865,11 @@ async function saveReport(kind){try{const html=buildReport(kind);const base=kind
 $('#btnRep1').onclick=()=>saveReport('cmp');$('#btnRep2').onclick=()=>saveReport('reg');
 
 /* ---------------- export ---------------- */
+function mkExport(slots){return slots.flatMap(sl=>(S.mk[sl]||[]).map(m=>({file:MK_SLOT[sl],role:m.role_th,name_en:m.name_en||m.name_tr||(m.need_tr&&m.need_tr.includes(m.name)?'':m.name),name:m.name,
+  addr_en:m.addr_tr||(m.need_tr&&m.need_tr.includes(m.address)?'':m.address),addr:m.address,note:[m.tr_state==='ok'?'แปลอัตโนมัติ ('+(m.tr_by||'')+')':'',m.addr_guess?'ที่อยู่จากหัวกระดาษ โปรดตรวจ':''].filter(Boolean).join('; ')})))}
 $('#btnExp1').onclick=async()=>{const r=S.cmp;const rows=r.results.map(x=>({status:ST[x.status][1],formula_no:x.formula?x.formula.idx+1:'',inci:x.formula?x.formula.inci:'',jp:x.formula?x.formula.jp:'',
   pct:x.formula&&x.formula.pct!=null?x.formula.pct:'',label:x.label_text,label_no:x.l!=null?x.l+1:'',score:Math.round(x.score),note:x.order_warn||x.suggest||''}));
-  const res=await api.export_report('cmp',rows,V.label.view.name+' vs '+V.formula.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
+  const res=await api.export_report('cmp',{rows,makers:mkExport(['label','formula'])},V.label.view.name+' vs '+V.formula.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
 $('#btnExp2').onclick=async()=>{const r=S.reg;const rows=r.items.map(it=>({level:LV[it.level][1],name:it.name,jp:it.jp,cas:it.cas.join(', '),pct:it.pct??'',
   hits:it.hits.map(h=>(h.kind==='banned'?'ห้ามใช้ ลำดับ ':'อาจใช้ ลำดับ ')+h.entry.no+' (หน้า '+h.entry.page+')').join('; '),
   limit:it.hits.filter(h=>h.kind==='restricted').flatMap(h=>h.entry.uses.map(u=>u.area+': '+u.max)).join(' | '),
@@ -818,7 +878,7 @@ $('#btnExp2').onclick=async()=>{const r=S.reg;const rows=r.items.map(it=>({level
   conds:[it.propellant?'ก๊าซขับดัน (ผลิตภัณฑ์อัดแก๊ส)':'',...(it.conds||[]).map(k=>{const c=(r.conds||[]).find(c=>c.key===k);return c?c.title:k})].filter(Boolean).join('; ')}));
   const conds=condCards(r).map(c=>({title:c.title,note:c.lines.map(l=>l.replace(/^!/,'⛔ ')).join(' / '),items:c.items.map(i=>r.items[i].name).join(', '),page:c.page||''}));
   const words=r.words.map(w=>({word:w.word.word,found:w.found,line:w.line,no:w.word.no}));
-  const res=await api.export_report('reg',{rows,words,conds},V.reg.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
+  const res=await api.export_report('reg',{rows,words,conds,makers:mkExport(['reg'])},V.reg.view.name);if(res.ok)toast('บันทึกแล้ว: '+res.path)};
 
 /* ---------------- start ---------------- */
 window.addEventListener('pywebviewready',async()=>{api=window.pywebview.api;refreshInfo();checkUpd();loadSummaries();

@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import webview
 import core
 import updater
+import makers
 
 
 def clean_marks(x):
@@ -19,6 +20,7 @@ class Api:
         self._formula = None
         self._reg = core.RegDB()
         self._cosing = core.CosIng()
+        self._tr = makers.Translator()
         self._lock = threading.Lock()
         self._seq = {}
         self._qa = None
@@ -85,6 +87,11 @@ class Api:
             prog("กำลังแสดงผล…")
             view = doc.view()
             out = {"ok": True, "view": view, "path": path}
+            try:
+                out["makers"] = makers.extract_makers(doc)
+            except Exception:
+                traceback.print_exc()
+                out["makers"] = []
             if slot == "label":
                 lab = core.extract_label(doc)
                 if not lab["items"]:
@@ -153,6 +160,13 @@ class Api:
     # ------------------------------------------------ CosIng / web
     def cosing(self, name):
         return self._cosing.check(name)
+
+    def translate(self, items):
+        """แปลชื่อ/ที่อยู่ผู้ผลิตเป็นอังกฤษ (ออนไลน์) — items = [{text, lang}]"""
+        try:
+            return {"ok": True, "res": self._tr.many(items)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def reg_lookup(self, names, cas):
         """ตรวจซ้ำด้วยชื่อเคมี/CAS จาก CosIng (เมื่อเอกสารใช้ชื่อ INCI ที่ประกาศ อย. ไม่ได้ใช้ หรือ CAS ในเอกสารผิด)"""
@@ -250,7 +264,7 @@ class Api:
         if kind == "cmp":
             sheet(ws, "ฉลาก vs สูตร", [("ผล", "status"), ("ลำดับในสูตร", "formula_no"), ("INCI", "inci"), ("ชื่อญี่ปุ่น", "jp"),
                                       ("%", "pct"), ("บนฉลาก", "label"), ("ลำดับบนฉลาก", "label_no"), ("ความเหมือน %", "score"),
-                                      ("หมายเหตุ", "note")], data)
+                                      ("หมายเหตุ", "note")], data["rows"] if isinstance(data, dict) else data)
         else:
             sheet(ws, "สารห้ามใช้ อย.", [("ผล", "level"), ("ชื่อสาร", "name"), ("ชื่อญี่ปุ่น", "jp"), ("CAS", "cas"), ("%", "pct"),
                                         ("พบในบัญชี อย.", "hits"), ("ปริมาณสูงสุด", "limit"), ("CosIng", "cosing"),
@@ -261,6 +275,10 @@ class Api:
             if data.get("words"):
                 sheet(wb.create_sheet(), "คำห้ามใช้", [("คำห้ามใช้", "word"), ("ลำดับ", "no"), ("พบ", "found"), ("ข้อความ", "line")],
                       data["words"])
+        mk = data.get("makers") if isinstance(data, dict) else None
+        if mk:
+            sheet(wb.create_sheet(), "ผู้ผลิต", [("ไฟล์", "file"), ("ประเภท", "role"), ("ชื่อ (อังกฤษ)", "name_en"), ("ชื่อตามเอกสาร", "name"),
+                                              ("ที่อยู่ (อังกฤษ)", "addr_en"), ("ที่อยู่ตามเอกสาร", "addr"), ("หมายเหตุ", "note")], mk)
         name = re.sub(r'[\\/:*?"<>|]', "_", "ผลตรวจ " + os.path.splitext(title)[0])[:120] + ".xlsx"
         r = self._window.create_file_dialog(webview.FileDialog.SAVE, save_filename=name,
                                             file_types=("Excel files (*.xlsx)",))
@@ -319,7 +337,9 @@ def main():
                 res["formula"] = api.load("formula", a[1])["ok"]
                 c = api.compare()
                 res["summary"] = c.get("summary")
-                res["reg"] = api.load("reg", a[1]).get("reg", {}).get("summary")
+                _r = api.load("reg", a[1])
+                res["reg"] = _r.get("reg", {}).get("summary")
+                res["makers"] = [(m["role"], m["name"], m["address"]) for m in _r.get("makers", [])]
                 res["cosing"] = api.cosing("PHENOXYETHANOL").get("status")
                 qa1 = api.ask("Climbazole 3% ในแชมพูเกินไหม")
                 qa2 = api.ask("ต้องแนบเอกสารอะไรบ้างตอนจดแจ้ง")

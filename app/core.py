@@ -5,7 +5,7 @@ import pymupdf
 from rapidfuzz import fuzz
 
 APP_NAME = "2NK INCI Check"
-VERSION = "1.2.4"
+VERSION = "1.2.5"
 
 if getattr(sys, "frozen", False):
     BASE = sys._MEIPASS
@@ -54,6 +54,10 @@ def has_cjk(s):
     return bool(re.search(r"[぀-ヿ一-鿿]", s or ""))
 
 
+def has_hangul(s):
+    return bool(re.search(r"[가-힯]", s or ""))
+
+
 def has_thai(s):
     return bool(re.search(r"[฀-๿]", s or ""))
 
@@ -77,7 +81,7 @@ class OCR:
             if lang not in cls._eng:
                 cls._eng[lang] = RapidOCR(params={
                     "Global.log_level": "error",
-                    "Rec.lang_type": {"th": LangRec.TH, "en": LangRec.EN}.get(lang, LangRec.CH),
+                    "Rec.lang_type": {"th": LangRec.TH, "en": LangRec.EN, "ko": LangRec.KOREAN}.get(lang, LangRec.CH),
                     "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.MOBILE,
                     "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
                 })
@@ -148,6 +152,14 @@ def _read_line(crop, allow_th):
         if lg == "th" and not has_thai(t):
             continue
         cands.append((t, s, lg))
+    # เกาหลี: โมเดล ch อ่านฮันกึลไม่ได้ (คะแนนต่ำ/ได้อักษรมั่ว) → ลองโมเดลเกาหลี รับเมื่อได้ฮันกึลจริง
+    if max(c[1] for c in cands) < 0.93:
+        try:
+            t, s = OCR.rec(crop, "ko")
+            if has_hangul(t) and s >= 0.6:
+                return (t, s + 0.05 if s > max(c[1] for c in cands) - 0.1 else s, "ko")
+        except Exception:
+            pass
     top = max(cands, key=lambda c: c[1])
     if top[1] < 0.96:
         for v in _variants(crop):
@@ -596,6 +608,9 @@ MARKERS = [
     (r"Ingredients?", 1), (r"COMPOSITION\s*[:：]", 2), (r"成份\s*[:：]?", 2), (r"전성분\s*[:：]?", 3),
 ]
 STOP = re.compile(r"^\s*(【|■|●|◆|\[|※|＊|\*|\d\s*[\)）]|販売名|お客様|製造販売|発売元|内容量|MADE IN|Made in|"
+                  r"委托方|受托方|委托企业|受托企业|生产企业|生产商|制造商|经销商|地址|净含量|生产许可|执行标准|保质期|使用方法|注意事项|"
+                  r"화장품제조업자|화장품책임판매업자|제조업자|책임판매업자|제조원|판매원|주소|고객|용량|사용법|사용방법|사용할 때|"
+                  r"製造販売元|発売元|販売元|製造元|"
                   r"วิธีใช้|คำเตือน|ผลิตโดย|นำเข้าโดย|จัดจำหน่าย|ผู้นำเข้า|ผู้ผลิต|ขนาดบรรจุ|ปริมาณสุทธิ|เลขที่|"
                   r"How to use|Directions|Caution|Warning|Manufactur|Distribut|Net\s|Exp|Mfg|Lot|"
                   r"\d+(?:\.\d+)?\s*(?:ml|g|oz|fl|กรัม|มล)\b)", re.I)

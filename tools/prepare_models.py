@@ -2,7 +2,7 @@
 import os, shutil, sys
 import rapidocr
 
-NEED = ["ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx", "th_PP-OCRv5_rec_mobile.onnx", "en_PP-OCRv5_rec_mobile.onnx",
+NEED = ["ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx", "th_PP-OCRv5_rec_mobile.onnx", "en_PP-OCRv5_rec_mobile.onnx", "korean_PP-OCRv5_rec_mobile.onnx",
         "ch_ppocr_mobile_v2.0_cls_mobile.onnx"]
 src = os.path.join(os.path.dirname(rapidocr.__file__), "models")
 dst = sys.argv[1]
@@ -18,6 +18,7 @@ if missing:
     core.OCR.run(img, "ch")
     core.OCR.run(img, "th")
     core.OCR.run(img, "en")
+    core.OCR.run(img, "ko")
 for n in NEED:
     shutil.copy2(os.path.join(src, n), os.path.join(dst, n))
 # ไฟล์ตั้งค่าของ rapidocr -> โฟลเดอร์ rapid ข้างโฟลเดอร์โมเดล
